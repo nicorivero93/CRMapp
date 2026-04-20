@@ -7,7 +7,7 @@ import {
   signOut,
   User,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db, googleProvider } from './firebase';
 
 type Profile = {
@@ -37,17 +37,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    return onAuthStateChanged(auth, async (u) => {
+    let unsubProfile: (() => void) | null = null;
+    const unsubAuth = onAuthStateChanged(auth, (u) => {
       setUser(u);
+      if (unsubProfile) { unsubProfile(); unsubProfile = null; }
       if (u) {
-        const snap = await getDoc(doc(db, 'users', u.uid));
-        if (snap.exists()) setProfile({ uid: u.uid, ...(snap.data() as any) });
-        else setProfile(null);
+        // Subscribe so that when bootstrapTeam finishes writing users/{uid}
+        // (which may happen AFTER this handler runs), profile populates.
+        unsubProfile = onSnapshot(
+          doc(db, 'users', u.uid),
+          (snap) => {
+            if (snap.exists()) setProfile({ uid: u.uid, ...(snap.data() as any) });
+            else setProfile(null);
+            setLoading(false);
+          },
+          () => setLoading(false),
+        );
       } else {
         setProfile(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
+    return () => { unsubAuth(); if (unsubProfile) unsubProfile(); };
   }, []);
 
   async function bootstrapTeam(u: User, name: string, teamName: string) {
