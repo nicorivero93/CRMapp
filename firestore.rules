@@ -1,0 +1,82 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() { return request.auth != null; }
+    function myUid() { return request.auth.uid; }
+    function myTeam() { return request.auth.token.teamId; }
+    function myRole() { return request.auth.token.role; }
+    function isTeamMember(teamId) { return isSignedIn() && myTeam() == teamId; }
+    function isOwner(teamId) { return isTeamMember(teamId) && myRole() == 'owner'; }
+
+    // During signup the client writes users/{uid} + teams/{uid}/... BEFORE
+    // the onUserDocCreated Function sets custom claims. Allow those first
+    // writes when the doc owner matches the authenticated uid and teamId==uid.
+    function isBootstrap(teamId) {
+      return isSignedIn() && teamId == myUid();
+    }
+
+    match /users/{uid} {
+      // Users can read their own doc, or docs of team members.
+      allow read: if isSignedIn() && (myUid() == uid || (resource != null && isTeamMember(resource.data.teamId)));
+      allow create: if isSignedIn() && myUid() == uid;
+      allow update, delete: if isSignedIn() && myUid() == uid;
+    }
+
+    match /teams/{teamId} {
+      allow read: if isTeamMember(teamId) || isBootstrap(teamId);
+      allow create: if isBootstrap(teamId);
+      allow update: if isOwner(teamId) || isBootstrap(teamId);
+      allow delete: if isOwner(teamId);
+
+      match /{sub=**} {
+        allow read, write: if isTeamMember(teamId) || isBootstrap(teamId);
+      }
+    }
+
+    match /contacts/{id} {
+      allow read: if isTeamMember(resource.data.teamId);
+      allow create: if isTeamMember(request.resource.data.teamId);
+      allow update, delete: if isTeamMember(resource.data.teamId);
+    }
+
+    match /deals/{id} {
+      allow read: if isTeamMember(resource.data.teamId);
+      allow create: if isTeamMember(request.resource.data.teamId);
+      allow update, delete: if isTeamMember(resource.data.teamId);
+    }
+
+    match /activities/{id} {
+      allow read: if isTeamMember(resource.data.teamId);
+      allow create: if isTeamMember(request.resource.data.teamId);
+      allow update, delete: if isTeamMember(resource.data.teamId);
+    }
+
+    match /events/{id} {
+      allow read: if isTeamMember(resource.data.teamId);
+      allow create: if isTeamMember(request.resource.data.teamId);
+      allow update, delete: if isTeamMember(resource.data.teamId);
+    }
+
+    match /automations/{id} {
+      allow read: if isTeamMember(resource.data.teamId);
+      allow create: if isTeamMember(request.resource.data.teamId);
+      allow update: if isTeamMember(resource.data.teamId);
+      allow delete: if isOwner(resource.data.teamId);
+    }
+
+    match /invites/{id} {
+      // Team owners read and manage invites for their team.
+      // Invitees also need to read by token to accept — handled by callable acceptInvite Function.
+      allow read: if isSignedIn() && isTeamMember(resource.data.teamId);
+      allow create: if isSignedIn() && isOwner(request.resource.data.teamId);
+      allow update, delete: if isSignedIn() && isOwner(resource.data.teamId);
+    }
+
+    match /notifications/{id} {
+      allow read, update: if isSignedIn() && resource.data.uid == myUid();
+      allow create: if false;
+      allow delete: if isSignedIn() && resource.data.uid == myUid();
+    }
+  }
+}
