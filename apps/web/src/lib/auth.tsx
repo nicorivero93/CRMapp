@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
+  signInAnonymously,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
@@ -9,6 +10,7 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db, googleProvider } from './firebase';
+import { seedDemoTeam } from './demoSeed';
 
 type Profile = {
   uid: string;
@@ -26,6 +28,7 @@ type Ctx = {
   signupEmail: (email: string, password: string, name: string, teamName: string) => Promise<void>;
   loginEmail: (email: string, password: string) => Promise<void>;
   loginGoogle: () => Promise<void>;
+  loginDemo: () => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -123,10 +126,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function loginDemo() {
+    const cred = await signInAnonymously(auth);
+    const existing = await getDoc(doc(db, 'users', cred.user.uid));
+    if (!existing.exists()) {
+      await bootstrapTeam(cred.user, 'Usuario Demo', 'Demo CRM');
+      await waitForClaims(cred.user, cred.user.uid);
+      // Populate with sample data so the demo feels alive from second 1.
+      try { await seedDemoTeam(cred.user.uid, cred.user.uid); } catch (e) { console.warn('demo seed failed', e); }
+    } else {
+      await cred.user.getIdToken(true);
+    }
+  }
+
   async function logout() { await signOut(auth); }
 
   return (
-    <AuthCtx.Provider value={{ user, profile, loading, signupEmail, loginEmail, loginGoogle, logout }}>
+    <AuthCtx.Provider value={{ user, profile, loading, signupEmail, loginEmail, loginGoogle, loginDemo, logout }}>
       {children}
     </AuthCtx.Provider>
   );
