@@ -9,6 +9,9 @@
   ],
   "scripts": {
     "dev": "npm --workspace apps/web run dev",
+    "dev:server": "npm --workspace apps/server run dev",
+    "test:server": "npm --workspace apps/server run test",
+    "build:server": "npm --workspace apps/server run build",
     "build": "npm --workspace apps/web run build",
     "preview": "npm --workspace apps/web run preview",
     "seed": "tsx scripts/seed.ts",
