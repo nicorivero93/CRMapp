@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { FileText, Upload, Clipboard } from 'lucide-react';
+import { FileText, Upload, Clipboard, FileSpreadsheet } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import type { ImportReportDTO, LeadSource } from '@mycrm/shared';
 import { api, ApiError } from '@/lib/api';
 
@@ -26,8 +27,22 @@ export default function LeadsImport() {
   async function submitCsv(file: File) {
     setBusy(true);
     try {
+      // If it's an Excel file, convert to CSV client-side with SheetJS and
+      // forward the CSV payload to the existing /api/leads/import endpoint.
+      let uploadFile: File = file;
+      const isXlsx = /\.(xlsx|xls)$/i.test(file.name);
+      if (isXlsx) {
+        const buf = await file.arrayBuffer();
+        const wb = XLSX.read(buf, { type: 'array' });
+        const sheetName = wb.SheetNames[0];
+        if (!sheetName) throw new Error('El Excel no tiene hojas');
+        const csv = XLSX.utils.sheet_to_csv(wb.Sheets[sheetName]);
+        if (!csv.trim()) throw new Error('La hoja está vacía');
+        const newName = file.name.replace(/\.(xlsx|xls)$/i, '.csv');
+        uploadFile = new File([csv], newName, { type: 'text/csv' });
+      }
       const form = new FormData();
-      form.append('file', file, file.name);
+      form.append('file', uploadFile, uploadFile.name);
       form.append('source', csvSource);
       form.append('defaultCountry', 'AR');
       const res = await fetch('/api/leads/import', {
@@ -78,9 +93,11 @@ export default function LeadsImport() {
       <div className="grid gap-4 md:grid-cols-2">
         <section className="rounded-lg border border-border bg-bg-soft p-4">
           <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
-            <FileText size={16} className="text-brand-400" /> Subir CSV
+            <FileText size={16} className="text-brand-400" /> Subir CSV o Excel
+            <FileSpreadsheet size={14} className="text-emerald-400" />
           </div>
           <p className="mb-3 text-xs text-text-dim">
+            Acepta <code className="text-text">.csv</code>, <code className="text-text">.xlsx</code> y <code className="text-text">.xls</code>.
             Columnas soportadas: <code className="text-text">nombre</code>, <code className="text-text">teléfono</code>, <code className="text-text">notas</code>.
             Columnas extra se guardan en <code className="text-text">sourceMeta</code>.
           </p>
@@ -96,7 +113,7 @@ export default function LeadsImport() {
           </select>
           <input
             type="file"
-            accept=".csv,text/csv"
+            accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
             disabled={busy}
             className="block w-full text-xs text-text-dim file:mr-3 file:rounded-md file:border-0 file:bg-brand-500/15 file:px-3 file:py-2 file:text-xs file:font-medium file:text-brand-400 hover:file:bg-brand-500/25"
             onChange={(e) => {

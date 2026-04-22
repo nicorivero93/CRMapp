@@ -131,13 +131,19 @@ export function Topbar() {
         )}
       </div>
       <div className="flex items-center gap-3">
-        <div className="text-right text-xs">
-          <div className="font-medium">{user?.name}</div>
-          <div className="text-text-faint">{user?.email}</div>
-        </div>
-        <div className="grid h-8 w-8 place-items-center rounded-full bg-brand-500/20 text-xs font-semibold text-brand-400">
-          {initials}
-        </div>
+        <Link
+          to="/app/profile"
+          className="flex items-center gap-3 rounded-lg px-2 py-1 hover:bg-bg-hover"
+          title="Mi perfil"
+        >
+          <div className="text-right text-xs">
+            <div className="font-medium">{user?.name}</div>
+            <div className="text-text-faint">{user?.email}</div>
+          </div>
+          <div className="grid h-8 w-8 place-items-center rounded-full bg-brand-500/20 text-xs font-semibold text-brand-400">
+            {initials}
+          </div>
+        </Link>
         <button onClick={() => void logout()} className="btn-ghost" title="Salir">
           <LogOut size={15} />
         </button>

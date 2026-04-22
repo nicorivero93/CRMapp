@@ -21,6 +21,7 @@ import Contacts from '@/routes/Contacts';
 import Calendar from '@/routes/Calendar';
 import Automations from '@/routes/Automations';
 import Settings from '@/routes/Settings';
+import Profile from '@/routes/Profile';
 
 function Protected({ children }: { children: JSX.Element }) {
   const { user, loading, ownerExists } = useAuth();
@@ -57,6 +58,7 @@ export default function App() {
         <Route path="settings/whatsapp" element={<SettingsWhatsApp />} />
         <Route path="settings/stages" element={<SettingsStages />} />
         <Route path="settings/updater" element={<SettingsUpdater />} />
+        <Route path="profile" element={<Profile />} />
       </Route>
       <Route path="*" element={<Navigate to="/app" replace />} />
     </Routes>

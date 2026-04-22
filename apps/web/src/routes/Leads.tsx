@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Inbox, Search, Upload, Download } from 'lucide-react';
+import { Inbox, Search, Upload, Download, MessageCircle } from 'lucide-react';
+import { BulkWhatsAppModal } from '@/components/BulkWhatsAppModal';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import type { LeadDTO, LeadSource, LeadStatus } from '@mycrm/shared';
@@ -60,6 +61,8 @@ export default function Leads() {
   const [q, setQ] = useState('');
   const [offset, setOffset] = useState(0);
   const limit = 50;
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
 
   const params = new URLSearchParams();
   if (status) params.set('status', status);
@@ -137,6 +140,11 @@ export default function Leads() {
           </p>
         </div>
         <div className="flex gap-2">
+          {selected.size > 0 && (
+            <button onClick={() => setBulkOpen(true)} className="btn-outline">
+              <MessageCircle size={14} /> WhatsApp ({selected.size})
+            </button>
+          )}
           <button onClick={exportCsv} className="btn-outline" disabled={total === 0}>
             <Download size={14} /> Exportar CSV
           </button>
@@ -195,6 +203,25 @@ export default function Leads() {
         <table className="w-full text-sm">
           <thead className="bg-bg/50 text-xs uppercase tracking-wide text-text-faint">
             <tr>
+              <th className="w-10 px-3 py-2 text-left font-medium">
+                <input
+                  type="checkbox"
+                  aria-label="Seleccionar todos"
+                  checked={
+                    (data?.leads.length ?? 0) > 0 &&
+                    data!.leads.every((l) => selected.has(l.id))
+                  }
+                  onChange={(e) => {
+                    const ids = data?.leads.map((l) => l.id) ?? [];
+                    setSelected((prev) => {
+                      const next = new Set(prev);
+                      if (e.target.checked) ids.forEach((id) => next.add(id));
+                      else ids.forEach((id) => next.delete(id));
+                      return next;
+                    });
+                  }}
+                />
+              </th>
               <th className="px-4 py-2 text-left font-medium">Nombre</th>
               <th className="px-4 py-2 text-left font-medium">Teléfono</th>
               <th className="px-4 py-2 text-left font-medium">Estado</th>
@@ -206,13 +233,28 @@ export default function Leads() {
           <tbody className="divide-y divide-border">
             {!isLoading && data?.leads.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-sm text-text-dim">
+                <td colSpan={7} className="px-4 py-10 text-center text-sm text-text-dim">
                   No hay leads con estos filtros. <Link to="/app/leads/import" className="text-brand-400 hover:underline">Importá CSV</Link> o pegá una lista.
                 </td>
               </tr>
             )}
             {data?.leads.map((lead) => (
               <tr key={lead.id} className="hover:bg-bg/40">
+                <td className="px-3 py-2">
+                  <input
+                    type="checkbox"
+                    aria-label={`Seleccionar ${lead.name ?? lead.phone}`}
+                    checked={selected.has(lead.id)}
+                    onChange={(e) => {
+                      setSelected((prev) => {
+                        const next = new Set(prev);
+                        if (e.target.checked) next.add(lead.id);
+                        else next.delete(lead.id);
+                        return next;
+                      });
+                    }}
+                  />
+                </td>
                 <td className="px-4 py-2">
                   <Link to={`/app/leads/${lead.id}`} className="text-brand-400 hover:underline">
                     {lead.name || <span className="text-text-faint italic">Sin nombre</span>}
@@ -234,6 +276,16 @@ export default function Leads() {
           </tbody>
         </table>
       </div>
+
+      {bulkOpen && (
+        <BulkWhatsAppModal
+          leads={(data?.leads ?? []).filter((l) => selected.has(l.id))}
+          onClose={() => {
+            setBulkOpen(false);
+            setSelected(new Set());
+          }}
+        />
+      )}
 
       {total > limit && (
         <div className="flex items-center justify-between text-xs text-text-dim">
