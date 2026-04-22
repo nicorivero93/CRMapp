@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import toast from 'react-hot-toast';
-import { ArrowLeft, MessageSquarePlus, Phone, ChevronDown, MessageCircle } from 'lucide-react';
-import type { LeadDTO, LeadEventDTO, LeadStatus } from '@mycrm/shared';
+import { ArrowLeft, MessageSquarePlus, Phone, ChevronDown, MessageCircle, UserCheck, X, DollarSign } from 'lucide-react';
+import type { ContactDTO, DealDTO, LeadDTO, LeadEventDTO, LeadStatus, StageDTO } from '@mycrm/shared';
 import { api } from '@/lib/api';
 import { WhatsAppLauncher } from '@/components/WhatsAppLauncher';
 
@@ -40,9 +40,12 @@ interface DetailResponse {
 
 export default function LeadDetail() {
   const { id = '' } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const [note, setNote] = useState('');
   const [waOpen, setWaOpen] = useState(false);
+  const [convertOpen, setConvertOpen] = useState(false);
+  const [dealOpen, setDealOpen] = useState(false);
 
   const { data, isLoading, error } = useQuery<DetailResponse>({
     queryKey: ['lead', id],
@@ -98,6 +101,16 @@ export default function LeadDetail() {
           <button onClick={() => setWaOpen(true)} className="btn-primary">
             <MessageCircle size={14} /> WhatsApp
           </button>
+          {!lead.convertedContactId && (
+            <button onClick={() => setConvertOpen(true)} className="btn-outline">
+              <UserCheck size={14} /> Convertir a contacto
+            </button>
+          )}
+          {!lead.convertedDealId && (
+            <button onClick={() => setDealOpen(true)} className="btn-outline">
+              <DollarSign size={14} /> Convertir a deal
+            </button>
+          )}
           <div className="relative">
             <select
               className="input appearance-none pr-8"
@@ -190,6 +203,238 @@ export default function LeadDetail() {
       </div>
 
       {waOpen && <WhatsAppLauncher lead={lead} onClose={() => setWaOpen(false)} />}
+      {convertOpen && (
+        <ConvertToContactModal
+          lead={lead}
+          onClose={() => setConvertOpen(false)}
+          onDone={(contactId) => {
+            qc.invalidateQueries({ queryKey: ['lead', id] });
+            qc.invalidateQueries({ queryKey: ['leads'] });
+            qc.invalidateQueries({ queryKey: ['contacts'] });
+            navigate(`/app/contacts?id=${contactId}`);
+          }}
+        />
+      )}
+      {dealOpen && (
+        <ConvertToDealModal
+          lead={lead}
+          onClose={() => setDealOpen(false)}
+          onDone={() => {
+            qc.invalidateQueries({ queryKey: ['lead', id] });
+            qc.invalidateQueries({ queryKey: ['leads'] });
+            qc.invalidateQueries({ queryKey: ['deals'] });
+            qc.invalidateQueries({ queryKey: ['contacts'] });
+            navigate('/app/pipeline');
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function ConvertToDealModal({
+  lead,
+  onClose,
+  onDone,
+}: {
+  lead: LeadDTO;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const stagesQ = useQuery({
+    queryKey: ['stages'],
+    queryFn: () => api.get<{ stages: StageDTO[] }>('/api/stages'),
+  });
+  const stages = stagesQ.data?.stages ?? [];
+  const [title, setTitle] = useState(lead.name ? `${lead.name} — nueva oportunidad` : 'Nueva oportunidad');
+  const [value, setValue] = useState(0);
+  const [currency, setCurrency] = useState('ARS');
+  const [stageId, setStageId] = useState('');
+  const [createContact, setCreateContact] = useState(!lead.convertedContactId);
+
+  // Auto-select first non-closed stage as default when stages load
+  if (!stageId && stages.length > 0) {
+    const first = stages.find((s) => !s.isClosedWon) ?? stages[0];
+    if (first) setStageId(first.id);
+  }
+
+  const run = useMutation({
+    mutationFn: () =>
+      api.post<{ deal: DealDTO }>(`/api/deals/from-lead/${lead.id}`, {
+        title,
+        value,
+        currency,
+        stageId,
+        createContact,
+      }),
+    onSuccess: () => {
+      toast.success('Lead convertido a deal');
+      onDone();
+    },
+    onError: (err: any) => toast.error(err.message ?? 'Error al convertir'),
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-md rounded-lg border border-border bg-bg-soft p-5 shadow-xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-base font-semibold">Convertir a deal</h2>
+          <button onClick={onClose} className="rounded p-1 text-text-dim hover:bg-bg hover:text-text">
+            <X size={16} />
+          </button>
+        </div>
+        <div className="space-y-3 text-sm">
+          <FieldRow label="Título">
+            <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} />
+          </FieldRow>
+          <div className="grid grid-cols-[1fr_100px] gap-2">
+            <FieldRow label="Valor">
+              <input
+                type="number"
+                min={0}
+                className="input"
+                value={value}
+                onChange={(e) => setValue(Number(e.target.value) || 0)}
+              />
+            </FieldRow>
+            <FieldRow label="Moneda">
+              <input className="input" value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} />
+            </FieldRow>
+          </div>
+          <FieldRow label="Etapa">
+            <select className="input" value={stageId} onChange={(e) => setStageId(e.target.value)}>
+              {stages.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </FieldRow>
+          {!lead.convertedContactId && (
+            <label className="flex items-center gap-2 text-xs text-text-dim">
+              <input
+                type="checkbox"
+                checked={createContact}
+                onChange={(e) => setCreateContact(e.target.checked)}
+              />
+              Crear también un contacto con estos datos
+            </label>
+          )}
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <button className="btn-outline" onClick={onClose} disabled={run.isPending}>
+            Cancelar
+          </button>
+          <button
+            className="btn-primary"
+            onClick={() => run.mutate()}
+            disabled={run.isPending || !stageId || !title.trim()}
+          >
+            {run.isPending ? 'Convirtiendo…' : 'Convertir'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ConvertToContactModal({
+  lead,
+  onClose,
+  onDone,
+}: {
+  lead: LeadDTO;
+  onClose: () => void;
+  onDone: (contactId: string) => void;
+}) {
+  const [overrides, setOverrides] = useState({
+    name: lead.name ?? '',
+    email: '',
+    company: '',
+    industry: '',
+  });
+
+  const run = useMutation({
+    mutationFn: () =>
+      api.post<{ contact: ContactDTO; lead: LeadDTO }>(`/api/leads/${lead.id}/convert-to-contact`, {
+        overrides: {
+          name: overrides.name.trim() || undefined,
+          email: overrides.email.trim() || null,
+          company: overrides.company.trim() || null,
+          industry: overrides.industry.trim() || null,
+        },
+      }),
+    onSuccess: (res) => {
+      toast.success('Lead convertido a contacto');
+      onDone(res.contact.id);
+    },
+    onError: (err: any) => toast.error(err.message ?? 'Error al convertir'),
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-md rounded-lg border border-border bg-bg-soft p-5 shadow-xl">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-base font-semibold">Convertir a contacto</h2>
+          <button onClick={onClose} className="rounded p-1 text-text-dim hover:bg-bg hover:text-text">
+            <X size={16} />
+          </button>
+        </div>
+        <p className="mb-3 text-xs text-text-dim">
+          Se va a crear un contacto con el teléfono <code className="text-text">{lead.phoneNormalized}</code>{' '}
+          y se marcará el lead como convertido. Podés ajustar los datos abajo.
+        </p>
+        <div className="space-y-3 text-sm">
+          <FieldRow label="Nombre">
+            <input
+              className="input"
+              value={overrides.name}
+              onChange={(e) => setOverrides({ ...overrides, name: e.target.value })}
+            />
+          </FieldRow>
+          <FieldRow label="Email">
+            <input
+              className="input"
+              type="email"
+              value={overrides.email}
+              onChange={(e) => setOverrides({ ...overrides, email: e.target.value })}
+            />
+          </FieldRow>
+          <FieldRow label="Empresa">
+            <input
+              className="input"
+              value={overrides.company}
+              onChange={(e) => setOverrides({ ...overrides, company: e.target.value })}
+            />
+          </FieldRow>
+          <FieldRow label="Industria">
+            <input
+              className="input"
+              value={overrides.industry}
+              onChange={(e) => setOverrides({ ...overrides, industry: e.target.value })}
+            />
+          </FieldRow>
+        </div>
+        <div className="mt-4 flex justify-end gap-2">
+          <button className="btn-outline" onClick={onClose}>
+            Cancelar
+          </button>
+          <button className="btn-primary" disabled={run.isPending} onClick={() => run.mutate()}>
+            {run.isPending ? 'Convirtiendo…' : 'Confirmar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs text-text-faint">{label}</label>
+      {children}
     </div>
   );
 }

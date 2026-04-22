@@ -14,6 +14,7 @@ import Sources from '@/routes/Sources';
 import SettingsAssignment from '@/routes/SettingsAssignment';
 import SettingsRecycling from '@/routes/SettingsRecycling';
 import SettingsWhatsApp from '@/routes/SettingsWhatsApp';
+import SettingsStages from '@/routes/SettingsStages';
 import Pipeline from '@/routes/Pipeline';
 import Contacts from '@/routes/Contacts';
 import Calendar from '@/routes/Calendar';
@@ -53,6 +54,7 @@ export default function App() {
         <Route path="settings/templates" element={<Templates />} />
         <Route path="settings/recycling" element={<SettingsRecycling />} />
         <Route path="settings/whatsapp" element={<SettingsWhatsApp />} />
+        <Route path="settings/stages" element={<SettingsStages />} />
       </Route>
       <Route path="*" element={<Navigate to="/app" replace />} />
     </Routes>
