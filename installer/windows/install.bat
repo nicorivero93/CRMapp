@@ -5,15 +5,23 @@ REM  Runs from the release folder. Requires: Administrator.
 REM =============================================================
 setlocal EnableExtensions EnableDelayedExpansion
 
+REM --- Restore Windows standard PATH (algunas shells heredan un PATH stripped que rompe todo) ---
+REM %SystemRoot% lo setea el kernel, siempre apunta a C:\Windows. Con esto garantizamos que
+REM whoami, curl, sc, netsh, net, xcopy, etc. se resuelven aunque el PATH heredado este roto.
+set "PATH=%SystemRoot%\System32;%SystemRoot%;%SystemRoot%\System32\Wbem;%SystemRoot%\System32\WindowsPowerShell\v1.0;%PATH%"
+
 echo.
 echo === MyCRM Local Server install ===
 echo.
 
-REM --- Admin check ---
-net session >nul 2>&1
+REM --- Admin check via SID del grupo Administrators (built-in Windows, no depende de PATH) ---
+REM S-1-5-32-544 es el SID well-known del grupo BUILTIN\Administrators.
+whoami /groups | find "S-1-5-32-544" >nul 2>&1
 if errorlevel 1 (
+    echo.
     echo ERROR: Este instalador debe correrse como Administrador.
-    echo        Click derecho sobre install.bat ^> "Ejecutar como administrador".
+    echo Win+X ^> "Terminal (Administrador)" ^> cd "%~dp0" ^> install.bat
+    echo.
     pause
     exit /b 1
 )
@@ -53,9 +61,12 @@ REM --- Download WinSW if not present ---
 set "WINSW=%INSTALL_DIR%\winsw.exe"
 if not exist "%WINSW%" (
     echo -^> Descargando WinSW ^(servicios Windows^)...
-    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-        "Invoke-WebRequest -Uri 'https://github.com/winsw/winsw/releases/download/v3.0.0-alpha.11/WinSW-x64.exe' -OutFile '%WINSW%'" || (
+    REM curl.exe viene en Windows 10 1803+ / Server 2019+.
+    curl -sL -o "%WINSW%" "https://github.com/winsw/winsw/releases/download/v3.0.0-alpha.11/WinSW-x64.exe"
+    if not exist "%WINSW%" (
         echo ERROR: No se pudo descargar WinSW. Verificá tu conexion a internet.
+        echo         URL: https://github.com/winsw/winsw/releases/download/v3.0.0-alpha.11/WinSW-x64.exe
+        echo         Podes bajarlo manualmente y dejarlo como: %WINSW%
         pause
         exit /b 1
     )

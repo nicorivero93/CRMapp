@@ -76,7 +76,8 @@
       "Bash(curl -s -c /tmp/ck.txt -X POST http://localhost:3180/api/auth/signup-owner -H 'content-type: application/json' -d '{\"email\":\"n@t.com\",\"password\":\"hunter2222\",\"name\":\"Nico\"}')",
       "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('role=',d['user']['role']\\)\")",
       "Bash(curl -s -b /tmp/ck.txt http://localhost:3180/api/settings)",
-      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('assignmentMode=',d['settings']['assignmentMode']\\)\")"
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('assignmentMode=',d['settings']['assignmentMode']\\)\")",
+      "Bash(node -e ' *)"
     ]
   }
 }

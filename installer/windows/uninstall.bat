@@ -5,13 +5,17 @@ REM  Preserva la DB en %ProgramData%\MyCRM\data\ para no perder leads.
 REM =============================================================
 setlocal EnableExtensions
 
+REM --- Restore Windows standard PATH (ver install.bat) ---
+set "PATH=%SystemRoot%\System32;%SystemRoot%;%SystemRoot%\System32\Wbem;%SystemRoot%\System32\WindowsPowerShell\v1.0;%PATH%"
+
 echo.
 echo === MyCRM Local Server uninstall ===
 echo.
 
-net session >nul 2>&1
+whoami /groups | find "S-1-5-32-544" >nul 2>&1
 if errorlevel 1 (
     echo ERROR: correr como Administrador.
+    echo   Win+X ^> "Terminal (Administrador)" ^> cd "%~dp0" ^> uninstall.bat
     pause
     exit /b 1
 )
