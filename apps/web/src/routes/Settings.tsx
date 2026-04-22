@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { Zap, ChevronRight, MessageSquare, Recycle, MessageCircle, Kanban, Download } from 'lucide-react';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
+import { Zap, ChevronRight, MessageSquare, Recycle, MessageCircle, Kanban, Download, Lock, Check } from 'lucide-react';
 import { api, type PublicUser } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import type { UpdaterStatusDTO } from '@mycrm/shared';
@@ -149,6 +151,8 @@ export default function Settings() {
         </div>
       </section>
 
+      {user && <ChangePasswordCard userId={user.id} />}
+
       <section className="rounded-lg border border-border bg-bg-soft p-4">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-text-dim">Usuarios de la instalación</h2>
@@ -178,5 +182,120 @@ export default function Settings() {
         </p>
       </section>
     </div>
+  );
+}
+
+function ChangePasswordCard({ userId }: { userId: string }) {
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNext, setShowNext] = useState(false);
+  const changePw = useMutation({
+    mutationFn: () =>
+      api.patch(`/api/users/${userId}`, {
+        password: next,
+        currentPassword: current,
+      }),
+    onSuccess: () => {
+      toast.success('Contraseña actualizada');
+      setCurrent('');
+      setNext('');
+      setConfirm('');
+    },
+    onError: (err: any) => {
+      if (err?.code === 'INVALID_CREDENTIALS') {
+        toast.error('La contraseña actual no coincide');
+      } else if (err?.code === 'CURRENT_PASSWORD_REQUIRED') {
+        toast.error('Ingresá tu contraseña actual.');
+      } else {
+        toast.error(err?.message ?? 'No se pudo cambiar la contraseña');
+      }
+    },
+  });
+
+  const pwMismatch = confirm.length > 0 && next !== confirm;
+  const pwShort = next.length > 0 && next.length < 8;
+  const canSubmit =
+    current.length > 0 && next.length >= 8 && next === confirm && !changePw.isPending;
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!canSubmit) return;
+    changePw.mutate();
+  }
+
+  return (
+    <section className="rounded-lg border border-border bg-bg-soft p-4">
+      <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-dim">
+        <Lock size={14} /> Cambiar contraseña
+      </h2>
+      <form onSubmit={submit} className="space-y-3 max-w-md">
+        <div>
+          <label className="mb-1 block text-xs text-text-faint">Contraseña actual</label>
+          <div className="flex gap-2">
+            <input
+              type={showCurrent ? 'text' : 'password'}
+              className="input flex-1"
+              value={current}
+              onChange={(e) => setCurrent(e.target.value)}
+              autoComplete="current-password"
+            />
+            <button
+              type="button"
+              onClick={() => setShowCurrent(!showCurrent)}
+              className="btn-ghost text-xs"
+              tabIndex={-1}
+            >
+              {showCurrent ? 'Ocultar' : 'Mostrar'}
+            </button>
+          </div>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-text-faint">Contraseña nueva (mín. 8)</label>
+          <div className="flex gap-2">
+            <input
+              type={showNext ? 'text' : 'password'}
+              className="input flex-1"
+              value={next}
+              onChange={(e) => setNext(e.target.value)}
+              autoComplete="new-password"
+            />
+            <button
+              type="button"
+              onClick={() => setShowNext(!showNext)}
+              className="btn-ghost text-xs"
+              tabIndex={-1}
+            >
+              {showNext ? 'Ocultar' : 'Mostrar'}
+            </button>
+          </div>
+          {pwShort && (
+            <div className="mt-1 text-xs text-amber-400">Necesitás al menos 8 caracteres.</div>
+          )}
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-text-faint">Confirmar contraseña nueva</label>
+          <input
+            type={showNext ? 'text' : 'password'}
+            className="input"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            autoComplete="new-password"
+          />
+          {pwMismatch && (
+            <div className="mt-1 text-xs text-red-400">No coincide con la nueva contraseña.</div>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          <button type="submit" className="btn-primary" disabled={!canSubmit}>
+            <Check size={14} /> {changePw.isPending ? 'Guardando…' : 'Cambiar contraseña'}
+          </button>
+          <span className="text-xs text-text-faint">
+            Tu sesión actual se mantiene activa después de cambiarla.
+          </span>
+        </div>
+      </form>
+    </section>
   );
 }

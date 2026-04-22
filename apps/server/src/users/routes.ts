@@ -7,8 +7,10 @@ import { createUserSchema, patchUserSchema } from '@mycrm/shared';
 import { getDb } from '../db/client.js';
 import { newId } from '../lib/ids.js';
 import { AppError } from '../lib/errors.js';
-import { hashPassword } from '../auth/password.js';
-import { invalidateAllUserSessions } from '../auth/session.js';
+import { hashPassword, verifyPassword } from '../auth/password.js';
+import { invalidateAllUserSessions, createSession } from '../auth/session.js';
+import { SESSION_COOKIE } from '../auth/middleware.js';
+import { config } from '../config.js';
 import { publicUser, requireAuth, requireRole } from '../auth/middleware.js';
 
 const idParam = z.object({ id: z.string().min(1) });
@@ -51,7 +53,7 @@ export async function registerUserRoutes(app: App): Promise<void> {
     reply.status(201).send({ user: publicUser(created) });
   });
 
-  app.patch('/api/users/:id', { preHandler: requireAuth }, async (req) => {
+  app.patch('/api/users/:id', { preHandler: requireAuth }, async (req, reply) => {
     const { id } = idParam.parse(req.params);
     const body = patchUserSchema.parse(req.body);
     const me = req.currentUser!;
@@ -81,13 +83,40 @@ export async function registerUserRoutes(app: App): Promise<void> {
     if (body.isActive !== undefined) patch.isActive = body.isActive;
     if (body.dailyLeadTarget !== undefined) patch.dailyLeadTarget = body.dailyLeadTarget;
     if (body.activeLineId !== undefined) patch.activeLineId = body.activeLineId;
-    if (body.password !== undefined) {
-      patch.passwordHash = await hashPassword(body.password);
+    const pwChanged = body.password !== undefined;
+    if (pwChanged) {
+      // When a user changes their own password, require the current one to
+      // prevent session-hijacking from rotating creds. Owner patching
+      // somebody else's password skips this check (admin reset flow).
+      if (isSelf) {
+        if (!body.currentPassword) {
+          throw new AppError('CURRENT_PASSWORD_REQUIRED', 'Enviá la contraseña actual.', 400);
+        }
+        const ok = await verifyPassword(target.passwordHash, body.currentPassword);
+        if (!ok) {
+          throw new AppError('INVALID_CREDENTIALS', 'La contraseña actual no coincide.', 401);
+        }
+      }
+      patch.passwordHash = await hashPassword(body.password!);
+      // Kill every session for this user; re-issue a fresh cookie below so
+      // the caller doesn't get logged out of THIS tab.
       invalidateAllUserSessions(id);
     }
 
     db.update(users).set(patch).where(eq(users.id, id)).run();
     const updated = db.select().from(users).where(eq(users.id, id)).get()!;
+
+    if (pwChanged && isSelf) {
+      const session = createSession(id);
+      reply.setCookie(SESSION_COOKIE, session.id, {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: !config.isDev,
+        path: '/',
+        expires: session.expiresAt,
+      });
+    }
+
     return { user: publicUser(updated) };
   });
 

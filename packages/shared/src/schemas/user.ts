@@ -19,6 +19,9 @@ export const patchUserSchema = z
     dailyLeadTarget: z.number().int().min(0).max(1000).optional(),
     activeLineId: z.string().nullable().optional(),
     password: passwordSchema.optional(),
+    // Required when `password` is set AND the caller is self-patching.
+    // Owner-patching-another-user's-password does not need it.
+    currentPassword: z.string().min(1).max(256).optional(),
   })
   .strict();
 
