@@ -1,6 +1,6 @@
 [package]
 name = "mycrm-desktop"
-version = "0.1.1"
+version = "0.1.2"
 description = "MyCRM Local Edition desktop wrapper"
 edition = "2021"
 rust-version = "1.77"
@@ -15,3 +15,5 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 tauri-plugin-shell = "2"
+tauri-plugin-log = "2"
+log = "0.4"

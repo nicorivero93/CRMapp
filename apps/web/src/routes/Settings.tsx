@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Zap, ChevronRight, MessageSquare, Recycle, MessageCircle, Kanban, Download, Lock, Check } from 'lucide-react';
+import { Zap, ChevronRight, MessageSquare, Recycle, MessageCircle, Kanban, Download, Lock, Check, Database } from 'lucide-react';
 import { api, type PublicUser } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import type { UpdaterStatusDTO } from '@mycrm/shared';
@@ -142,6 +142,8 @@ export default function Settings() {
         </>
       )}
 
+      {user?.role === 'owner' && <BackupCard />}
+
       <section className="rounded-lg border border-border bg-bg-soft p-4">
         <h2 className="mb-3 text-sm font-semibold text-text-dim">Tu cuenta</h2>
         <div className="space-y-1 text-sm">
@@ -182,6 +184,48 @@ export default function Settings() {
         </p>
       </section>
     </div>
+  );
+}
+
+function BackupCard() {
+  const [busy, setBusy] = useState(false);
+  async function download() {
+    setBusy(true);
+    try {
+      const res = await fetch('/api/backup', { credentials: 'include' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const cd = res.headers.get('content-disposition') ?? '';
+      const match = cd.match(/filename="([^"]+)"/);
+      const filename = match?.[1] ?? `mycrm-backup-${Date.now()}.db.gz`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast.success('Backup descargado');
+    } catch (err: any) {
+      toast.error(err.message ?? 'Error descargando backup');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <section className="rounded-lg border border-border bg-bg-soft p-4">
+      <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-text-dim">
+        <Database size={14} /> Backup manual
+      </h2>
+      <p className="mb-3 text-xs text-text-faint">
+        Descarga un snapshot consistente de la DB (SQLite online backup + gzip).
+        Guardalo en otro disco/servicio para poder restaurar si se rompe la PC.
+      </p>
+      <button onClick={download} disabled={busy} className="btn-outline">
+        <Download size={14} /> {busy ? 'Generando…' : 'Descargar backup'}
+      </button>
+    </section>
   );
 }
 

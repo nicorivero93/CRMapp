@@ -4,6 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { LayoutDashboard, KanbanSquare, Users, Calendar, Zap, Settings, Sparkles, Inbox, Upload, Target, Phone, BarChart3 } from 'lucide-react';
 import clsx from 'clsx';
 import { api, type PublicUser } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
+import type { UpdaterStatusDTO } from '@mycrm/shared';
 
 interface Item {
   to: string;
@@ -38,11 +40,22 @@ const ALL_ITEMS: Item[] = [
 ];
 
 export function Sidebar() {
+  const { user } = useAuth();
   const usersQ = useQuery({
     queryKey: ['users'],
     queryFn: () => api.get<{ users: PublicUser[] }>('/api/users'),
   });
   const users = usersQ.data?.users ?? [];
+
+  // Owners get a small "update available" dot on Configuración.
+  const updaterQ = useQuery({
+    queryKey: ['updater-status-sidebar'],
+    queryFn: () => api.get<{ status: UpdaterStatusDTO }>('/api/updater/status'),
+    enabled: user?.role === 'owner',
+    refetchInterval: 60000,
+    staleTime: 30000,
+  });
+  const hasUpdate = !!updaterQ.data?.status.hasUpdate;
 
   const items = useMemo(
     () => ALL_ITEMS.filter((i) => !i.showIf || i.showIf({ users })),
@@ -58,21 +71,31 @@ export function Sidebar() {
         <div className="font-semibold tracking-tight">MyCRM</div>
       </div>
       <nav className="flex flex-1 flex-col gap-1 px-3">
-        {items.map(({ to, label, icon: Icon, end }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={end}
-            className={({ isActive }) =>
-              clsx(
-                'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
-                isActive ? 'bg-brand-500/10 text-brand-400' : 'text-text-dim hover:bg-bg-hover hover:text-text'
-              )
-            }
-          >
-            <Icon size={16} /> {label}
-          </NavLink>
-        ))}
+        {items.map(({ to, label, icon: Icon, end }) => {
+          const showDot = hasUpdate && to === '/app/settings';
+          return (
+            <NavLink
+              key={to}
+              to={to}
+              end={end}
+              className={({ isActive }) =>
+                clsx(
+                  'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
+                  isActive ? 'bg-brand-500/10 text-brand-400' : 'text-text-dim hover:bg-bg-hover hover:text-text'
+                )
+              }
+            >
+              <Icon size={16} />
+              <span className="flex-1">{label}</span>
+              {showDot && (
+                <span
+                  className="h-2 w-2 rounded-full bg-amber-400"
+                  title="Actualización disponible"
+                />
+              )}
+            </NavLink>
+          );
+        })}
       </nav>
       <div className="px-5 py-4 text-[11px] text-text-faint">
         © 2026 ·{' '}

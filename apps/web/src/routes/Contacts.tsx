@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Users, Search, Upload, Plus, X } from 'lucide-react';
+import { Users, Search, Upload, Plus, X, Download } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import type { ContactDTO } from '@mycrm/shared';
 import { api, ApiError } from '@/lib/api';
+import { toCsv, downloadCsv } from '@/lib/csv';
 import { ContactDrawer } from '@/components/ContactDrawer';
 
 interface ListResponse {
@@ -89,6 +90,49 @@ export default function Contacts() {
           </p>
         </div>
         <div className="flex gap-2">
+          <button
+            className="btn-outline"
+            disabled={total === 0}
+            onClick={async () => {
+              try {
+                const exportQs = new URLSearchParams(qs);
+                exportQs.set('limit', '10000');
+                exportQs.set('offset', '0');
+                const all = await api.get<ListResponse>(`/api/contacts?${exportQs.toString()}`);
+                if (all.contacts.length === 0) {
+                  toast('No hay contactos para exportar');
+                  return;
+                }
+                const csv = toCsv(
+                  all.contacts.map((c) => ({
+                    nombre: c.name,
+                    telefono: c.phone,
+                    email: c.email ?? '',
+                    empresa: c.company ?? '',
+                    industria: c.industry ?? '',
+                    tags: c.tags.join('|'),
+                    creado: c.createdAt,
+                  })),
+                  [
+                    { key: 'nombre', label: 'Nombre' },
+                    { key: 'telefono', label: 'Teléfono' },
+                    { key: 'email', label: 'Email' },
+                    { key: 'empresa', label: 'Empresa' },
+                    { key: 'industria', label: 'Industria' },
+                    { key: 'tags', label: 'Tags' },
+                    { key: 'creado', label: 'Creado' },
+                  ],
+                );
+                const ts = new Date().toISOString().slice(0, 10);
+                downloadCsv(`contactos-${ts}.csv`, csv);
+                toast.success(`${all.contacts.length} contactos exportados`);
+              } catch (err: any) {
+                toast.error(err.message ?? 'Error exportando');
+              }
+            }}
+          >
+            <Download size={14} /> Exportar
+          </button>
           <button className="btn-outline" onClick={() => setImportOpen(true)}>
             <Upload size={14} /> Importar CSV
           </button>

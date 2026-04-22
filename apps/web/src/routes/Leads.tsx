@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Inbox, Search, Upload } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { Inbox, Search, Upload, Download } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import type { LeadDTO, LeadSource, LeadStatus } from '@mycrm/shared';
 import { api, type PublicUser } from '@/lib/api';
+import { toCsv, downloadCsv } from '@/lib/csv';
 
 const STATUS_OPTIONS: Array<{ value: LeadStatus | ''; label: string }> = [
   { value: '', label: 'Todos los estados' },
@@ -81,6 +83,44 @@ export default function Leads() {
     return usersQ.data?.users.find((u) => u.id === id)?.name ?? id.slice(0, 6);
   };
 
+  async function exportCsv() {
+    try {
+      const exportParams = new URLSearchParams(params);
+      exportParams.set('limit', '10000');
+      exportParams.set('offset', '0');
+      const all = await api.get<ListResponse>(`/api/leads?${exportParams.toString()}`);
+      if (all.leads.length === 0) {
+        toast('No hay leads para exportar con estos filtros');
+        return;
+      }
+      const csv = toCsv(
+        all.leads.map((l) => ({
+          nombre: l.name ?? '',
+          telefono: l.phone,
+          estado: l.status,
+          fuente: l.source,
+          asignado: userName(l.assignedTo),
+          notas: l.notes ?? '',
+          creado: l.createdAt,
+        })),
+        [
+          { key: 'nombre', label: 'Nombre' },
+          { key: 'telefono', label: 'Teléfono' },
+          { key: 'estado', label: 'Estado' },
+          { key: 'fuente', label: 'Fuente' },
+          { key: 'asignado', label: 'Asignado a' },
+          { key: 'notas', label: 'Notas' },
+          { key: 'creado', label: 'Creado' },
+        ],
+      );
+      const ts = new Date().toISOString().slice(0, 10);
+      downloadCsv(`leads-${ts}.csv`, csv);
+      toast.success(`${all.leads.length} leads exportados`);
+    } catch (err: any) {
+      toast.error(err.message ?? 'Error exportando');
+    }
+  }
+
   const total = data?.total ?? 0;
   const pageStart = offset + 1;
   const pageEnd = Math.min(offset + limit, total);
@@ -96,9 +136,14 @@ export default function Leads() {
             {isLoading ? 'Cargando…' : `${total} lead${total === 1 ? '' : 's'}`}
           </p>
         </div>
-        <Link to="/app/leads/import" className="btn-primary">
-          <Upload size={14} /> Importar
-        </Link>
+        <div className="flex gap-2">
+          <button onClick={exportCsv} className="btn-outline" disabled={total === 0}>
+            <Download size={14} /> Exportar CSV
+          </button>
+          <Link to="/app/leads/import" className="btn-primary">
+            <Upload size={14} /> Importar
+          </Link>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2">

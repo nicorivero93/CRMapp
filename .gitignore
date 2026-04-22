@@ -13,3 +13,4 @@ functions/lib/
 .idea/
 coverage/
 mycrm-local*.zip
+MyCRM_*_x64-setup.exe

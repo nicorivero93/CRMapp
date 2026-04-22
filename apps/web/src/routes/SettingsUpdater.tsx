@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
@@ -6,9 +7,15 @@ import type { ApplyUpdateResponse, UpdaterStatusDTO } from '@mycrm/shared';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
+type UpdatePhase = 'idle' | 'updating' | 'failed';
+
 export default function SettingsUpdater() {
   const { user } = useAuth();
   if (user && user.role !== 'owner') return <Navigate to="/app/settings" replace />;
+
+  const [phase, setPhase] = useState<UpdatePhase>('idle');
+  const [elapsed, setElapsed] = useState(0);
+  const [startVersion, setStartVersion] = useState<string | null>(null);
 
   const statusQ = useQuery({
     queryKey: ['updater-status'],
@@ -30,13 +37,53 @@ export default function SettingsUpdater() {
     mutationFn: () => api.post<ApplyUpdateResponse>('/api/updater/apply', {}),
     onSuccess: (r) => {
       if (r.status === 'initiated') {
-        toast.success('Actualización iniciada. El servidor se está reiniciando…');
+        toast.success('Actualización iniciada. Esperá ~30–60s…');
+        setStartVersion(statusQ.data?.status.currentVersion ?? null);
+        setPhase('updating');
+        setElapsed(0);
       } else {
         toast(r.message);
       }
     },
     onError: (err: any) => toast.error(err.message ?? 'Error al iniciar update'),
   });
+
+  // Post-apply polling: hit /api/health every 2s. When the reported version
+  // differs from the one we started at, the new server is up → reload.
+  useEffect(() => {
+    if (phase !== 'updating') return;
+    let cancelled = false;
+    const started = Date.now();
+    const tick = async () => {
+      if (cancelled) return;
+      setElapsed(Math.floor((Date.now() - started) / 1000));
+      try {
+        const res = await fetch('/api/health', {
+          credentials: 'include',
+          cache: 'no-store',
+        });
+        if (res.ok) {
+          const body = (await res.json()) as { version?: string };
+          if (body.version && startVersion && body.version !== startVersion) {
+            window.location.reload();
+            return;
+          }
+        }
+      } catch {
+        // server is down during restart — expected, keep polling
+      }
+      if (Date.now() - started > 120_000) {
+        setPhase('failed');
+        return;
+      }
+      setTimeout(tick, 2000);
+    };
+    const t = setTimeout(tick, 3000);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [phase, startVersion]);
 
   const s = statusQ.data?.status;
 
@@ -62,6 +109,44 @@ export default function SettingsUpdater() {
       </div>
 
       {statusQ.isLoading && <div className="text-sm text-text-dim">Consultando…</div>}
+
+      {phase === 'updating' && (
+        <section className="rounded-lg border border-brand-500/40 bg-brand-500/5 p-4">
+          <div className="flex items-center gap-2">
+            <RefreshCw size={16} className="animate-spin text-brand-400" />
+            <div className="text-sm font-medium">
+              Actualizando… el servicio se está reiniciando ({elapsed}s)
+            </div>
+          </div>
+          <p className="mt-2 text-xs text-text-dim">
+            Esta página se va a recargar sola cuando el server nuevo responda.
+            No cierres la ventana.
+          </p>
+        </section>
+      )}
+
+      {phase === 'failed' && (
+        <section className="rounded-lg border border-red-500/40 bg-red-500/5 p-4">
+          <div className="flex items-start gap-2">
+            <AlertTriangle size={16} className="mt-0.5 text-red-400" />
+            <div className="text-sm">
+              <div className="font-medium text-red-400">El update tardó demasiado</div>
+              <p className="mt-1 text-xs text-text-dim">
+                Pasaron 2 minutos sin respuesta del servidor. Probablemente hubo
+                rollback automático. Revisá el log en{' '}
+                <code className="font-mono">C:\ProgramData\MyCRM\logs\</code>
+                y volvé a intentar.
+              </p>
+              <button
+                onClick={() => setPhase('idle')}
+                className="btn-outline mt-2 text-xs"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
 
       {s && (
         <>
@@ -134,10 +219,10 @@ export default function SettingsUpdater() {
                     apply.mutate();
                   }
                 }}
-                disabled={apply.isPending}
+                disabled={apply.isPending || phase === 'updating'}
                 className="btn-primary"
               >
-                <Download size={14} /> {apply.isPending ? 'Iniciando…' : 'Actualizar ahora'}
+                <Download size={14} /> {apply.isPending ? 'Iniciando…' : phase === 'updating' ? 'En curso…' : 'Actualizar ahora'}
               </button>
             </section>
           )}

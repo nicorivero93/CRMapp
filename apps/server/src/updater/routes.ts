@@ -170,11 +170,36 @@ export async function registerUpdaterRoutes(app: App): Promise<void> {
       return;
     }
 
-    // Detach: spawn PowerShell in a new process with stdin closed so we can
-    // exit the service cleanly. The updater handles the rest.
-    logger.info({ script, target }, 'updater: launching update script');
+    // Use absolute path to powershell.exe: when running as SYSTEM under WinSW
+    // the PATH env often does not include WindowsPowerShell\v1.0, so bare
+    // 'powershell.exe' fails with ENOENT (silently, because stdio is ignored).
+    const systemRoot = process.env.SystemRoot ?? 'C:\\Windows';
+    const psExe = path.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+    if (!fs.existsSync(psExe)) {
+      logger.error({ psExe }, 'updater: powershell.exe not found');
+      reply.status(500).send({
+        status: 'no-candidate',
+        version: target,
+        message: `No encontré powershell.exe en ${psExe}. Contactá soporte.`,
+      });
+      return;
+    }
+
+    // Write a marker file so we can tell from disk whether the spawn happened.
+    const logDir = path.join(process.env.ProgramData ?? 'C:\\ProgramData', 'MyCRM', 'logs');
+    try { fs.mkdirSync(logDir, { recursive: true }); } catch { /* ignore */ }
+    const markerPath = path.join(logDir, 'update-marker.log');
+    const startedAt = new Date().toISOString();
+    try {
+      fs.appendFileSync(
+        markerPath,
+        `[${startedAt}] spawn attempt: target=${target} script=${script}\n`,
+      );
+    } catch { /* ignore */ }
+
+    logger.info({ script, target, psExe }, 'updater: launching update script');
     const child = spawn(
-      'powershell.exe',
+      psExe,
       [
         '-NoProfile',
         '-ExecutionPolicy', 'Bypass',
@@ -187,8 +212,21 @@ export async function registerUpdaterRoutes(app: App): Promise<void> {
         detached: true,
         stdio: 'ignore',
         windowsHide: true,
+        env: {
+          ...process.env,
+          PATH: `${systemRoot}\\System32;${systemRoot};${systemRoot}\\System32\\Wbem;${systemRoot}\\System32\\WindowsPowerShell\\v1.0;${process.env.PATH ?? ''}`,
+        },
       },
     );
+    child.on('error', (err) => {
+      logger.error({ err: err.message, psExe, script }, 'updater: spawn failed');
+      try {
+        fs.appendFileSync(
+          markerPath,
+          `[${new Date().toISOString()}] spawn error: ${err.message}\n`,
+        );
+      } catch { /* ignore */ }
+    });
     child.unref();
 
     const res: ApplyUpdateResponse = {

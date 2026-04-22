@@ -86,8 +86,15 @@ export default function Automations() {
       {rulesQ.isLoading && <div className="text-sm text-text-dim">Cargando…</div>}
 
       {!rulesQ.isLoading && rules.length === 0 && (
-        <div className="rounded-lg border border-border bg-bg-soft p-6 text-center text-sm text-text-dim">
-          No hay reglas todavía. Creá la primera para automatizar tu flujo.
+        <div className="rounded-lg border border-border bg-bg-soft p-10 text-center">
+          <div className="mb-2 text-lg font-medium">Sin automatizaciones todavía</div>
+          <p className="mx-auto mb-4 max-w-md text-sm text-text-dim">
+            Creá reglas que se disparen cuando cambie un lead. Ejemplo: si un
+            lead cae en "Sin respuesta" más de 3 días → mandá un WhatsApp.
+          </p>
+          <button className="btn-primary" onClick={() => setCreating(true)}>
+            <Plus size={14} /> Crear primera automatización
+          </button>
         </div>
       )}
 
