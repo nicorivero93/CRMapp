@@ -1,8 +1,10 @@
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
+import { useServerEvents } from '@/lib/useSSE';
 
 export function AppShell() {
+  useServerEvents();
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-bg">
       <Sidebar />

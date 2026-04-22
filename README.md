@@ -40,6 +40,30 @@ firebase functions:secrets:set GOOGLE_OAUTH_REDIRECT
 npm run dev   # local en http://localhost:5173
 ```
 
+## Local Edition (self-hosted, rama `local`)
+
+Variante sin Firebase: Node + SQLite + Fastify, instalable en la PC del cliente. Fase L2.1 completa (infra base + auth + users).
+
+```bash
+# desde la rama `local`
+npm install
+npm run dev:server          # arranca en http://localhost:3180
+
+# primer owner + login
+curl -c cookies.txt -X POST http://localhost:3180/api/auth/signup-owner \
+  -H 'content-type: application/json' \
+  -d '{"email":"owner@empresa.com","password":"hunter2222","name":"Dueño"}'
+
+curl -b cookies.txt http://localhost:3180/api/auth/me
+curl -b cookies.txt http://localhost:3180/api/users
+curl http://localhost:3180/api/health
+
+# tests
+npm run test:server
+```
+
+DB file: `apps/server/data/mycrm.db` (SQLite WAL). Migrations corren en cada boot. Spec completo: `docs/sprint-2-local-prompt.md`.
+
 ## Deploy
 
 ```bash

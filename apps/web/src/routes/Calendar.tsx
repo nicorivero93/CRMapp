@@ -1,98 +1,117 @@
 import { useMemo, useState } from 'react';
-import { addDays, format, startOfWeek, endOfWeek } from 'date-fns';
+import { useQuery } from '@tanstack/react-query';
+import {
+  addDays,
+  addWeeks,
+  endOfWeek,
+  format,
+  startOfWeek,
+  subWeeks,
+} from 'date-fns';
 import { es } from 'date-fns/locale';
-import { where, Timestamp } from 'firebase/firestore';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
-import { useAuth } from '@/lib/auth';
-import { useCollection } from '@/lib/useCollection';
-import { EventDoc } from '@/lib/types';
-import { WeekView } from '@/features/calendar/WeekView';
-import { EventModal } from '@/features/calendar/EventModal';
-import { GoogleConnect } from '@/features/calendar/GoogleConnect';
-import { TeamPanel } from '@/features/calendar/TeamPanel';
+import type { EventDTO } from '@mycrm/shared';
+import { api } from '@/lib/api';
+import { WeekView } from '@/components/WeekView';
+import { EventModal } from '@/components/EventModal';
 
-function toDate(v: any): Date {
-  if (!v) return new Date();
-  if (v instanceof Date) return v;
-  if (typeof v.toDate === 'function') return v.toDate();
-  return new Date(v);
+interface ModalState {
+  mode: 'create' | 'edit';
+  event: EventDTO | null;
+  defaultStart?: Date;
 }
 
 export default function Calendar() {
-  const { profile } = useAuth();
-  const teamId = profile!.teamId;
+  const [anchor, setAnchor] = useState<Date>(new Date());
+  const [modal, setModal] = useState<ModalState | null>(null);
 
-  const [weekStart, setWeekStart] = useState<Date>(() => startOfWeek(new Date(), { weekStartsOn: 1, locale: es }));
-  const [view, setView] = useState<'week' | 'day'>('week');
-  const [editing, setEditing] = useState<EventDoc | null>(null);
-  const [creating, setCreating] = useState<{ start: Date } | null>(null);
+  const weekStart = useMemo(() => startOfWeek(anchor, { weekStartsOn: 1 }), [anchor]);
+  const weekEnd = useMemo(() => endOfWeek(anchor, { weekStartsOn: 1 }), [anchor]);
 
-  const weekEnd = useMemo(() => endOfWeek(weekStart, { weekStartsOn: 1, locale: es }), [weekStart]);
+  // from = weekStart 00:00 local, to = next Monday 00:00 (exclusive end).
+  const fromIso = useMemo(() => weekStart.toISOString(), [weekStart]);
+  const toIso = useMemo(() => addDays(weekStart, 7).toISOString(), [weekStart]);
 
-  const { data: allEvents } = useCollection<EventDoc>('events', where('teamId', '==', teamId));
+  const eventsQ = useQuery({
+    queryKey: ['events', fromIso, toIso],
+    queryFn: () =>
+      api.get<{ events: EventDTO[] }>(
+        `/api/events?${new URLSearchParams({ from: fromIso, to: toIso }).toString()}`,
+      ),
+  });
 
-  const events = useMemo(() => {
-    const ws = weekStart.getTime();
-    const we = weekEnd.getTime();
-    return allEvents.filter((e) => {
-      const s = toDate(e.start).getTime();
-      return s >= ws && s <= we;
-    });
-  }, [allEvents, weekStart, weekEnd]);
+  const events = eventsQ.data?.events ?? [];
 
-  function prev() { setWeekStart((d) => addDays(d, -7)); }
-  function next() { setWeekStart((d) => addDays(d, 7)); }
-  function today() { setWeekStart(startOfWeek(new Date(), { weekStartsOn: 1, locale: es })); }
+  const label = useMemo(() => {
+    const sameMonth = weekStart.getMonth() === weekEnd.getMonth();
+    if (sameMonth) {
+      return `${format(weekStart, 'd', { locale: es })} – ${format(weekEnd, "d 'de' MMMM yyyy", { locale: es })}`;
+    }
+    return `${format(weekStart, "d MMM", { locale: es })} – ${format(weekEnd, "d MMM yyyy", { locale: es })}`;
+  }, [weekStart, weekEnd]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="mb-4 flex items-center justify-between gap-3">
+    <div className="flex h-full flex-col gap-3 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">Calendario</h1>
-          <p className="text-sm text-text-dim">
-            Semana del {format(weekStart, "d 'de' MMM", { locale: es })} al {format(weekEnd, "d 'de' MMM yyyy", { locale: es })}
-          </p>
+          <p className="text-xs text-text-dim">Agendá reuniones, llamadas y tareas.</p>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex overflow-hidden rounded-md border border-white/10">
-            <button
-              onClick={() => setView('week')}
-              className={`px-3 py-1.5 text-xs ${view === 'week' ? 'bg-primary text-white' : 'text-text-dim hover:bg-white/5'}`}
-            >Semanal</button>
-            <button
-              onClick={() => setView('day')}
-              disabled
-              className="px-3 py-1.5 text-xs text-text-dim/50"
-              title="Próximamente"
-            >Diario</button>
-          </div>
-          <button onClick={today} className="btn-outline">Hoy</button>
-          <button onClick={prev} className="btn-outline"><ChevronLeft size={14}/></button>
-          <button onClick={next} className="btn-outline"><ChevronRight size={14}/></button>
-          <button onClick={() => setCreating({ start: new Date() })} className="btn-primary"><Plus size={14}/> Nuevo evento</button>
+          <button
+            onClick={() => setAnchor(subWeeks(anchor, 1))}
+            className="btn-ghost !px-2"
+            aria-label="Semana anterior"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <button onClick={() => setAnchor(new Date())} className="btn-outline">
+            Hoy
+          </button>
+          <button
+            onClick={() => setAnchor(addWeeks(anchor, 1))}
+            className="btn-ghost !px-2"
+            aria-label="Semana siguiente"
+          >
+            <ChevronRight size={16} />
+          </button>
+          <div className="ml-2 min-w-[180px] text-sm text-text-dim">{label}</div>
+          <button
+            onClick={() => {
+              const d = new Date();
+              d.setHours(9, 0, 0, 0);
+              setModal({ mode: 'create', event: null, defaultStart: d });
+            }}
+            className="btn-primary"
+          >
+            <Plus size={14} /> Nuevo evento
+          </button>
         </div>
       </div>
 
-      <div className="mb-4">
-        <GoogleConnect />
-      </div>
-
-      <div className="flex min-h-0 flex-1 gap-4">
+      {eventsQ.isLoading ? (
+        <div className="flex flex-1 items-center justify-center text-text-dim">Cargando…</div>
+      ) : eventsQ.isError ? (
+        <div className="flex flex-1 items-center justify-center text-red-400">
+          Error al cargar eventos
+        </div>
+      ) : (
         <WeekView
           events={events}
           weekStart={weekStart}
-          onEventClick={(e) => setEditing(e)}
-          onSlotClick={(date, hour) => {
-            const s = new Date(date);
-            s.setHours(hour, 0, 0, 0);
-            setCreating({ start: s });
-          }}
+          onEventClick={(e) => setModal({ mode: 'edit', event: e })}
+          onSlotClick={(start) => setModal({ mode: 'create', event: null, defaultStart: start })}
         />
-        <TeamPanel />
-      </div>
+      )}
 
-      {editing && <EventModal event={editing} onClose={() => setEditing(null)} />}
-      {creating && <EventModal defaultStart={creating.start} onClose={() => setCreating(null)} />}
+      {modal && (
+        <EventModal
+          mode={modal.mode}
+          event={modal.event}
+          defaultStart={modal.defaultStart}
+          onClose={() => setModal(null)}
+        />
+      )}
     </div>
   );
 }

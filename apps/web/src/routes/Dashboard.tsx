@@ -1,153 +1,208 @@
-import { useMemo } from 'react';
-import { where } from 'firebase/firestore';
-import { Calendar, DollarSign, Target, TrendingUp } from 'lucide-react';
-import { endOfMonth, startOfMonth, subMonths } from 'date-fns';
+import { Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { formatDistanceToNow } from 'date-fns';
+import { es } from 'date-fns/locale';
+import { Inbox, Target, CheckCircle2, Recycle, TrendingUp, AlertTriangle } from 'lucide-react';
+import type { DashboardReport } from '@mycrm/shared';
+import { api, type PublicUser } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { useCollection } from '@/lib/useCollection';
-import { Contact, Deal, EventDoc, Stage } from '@/lib/types';
-import { KPICard } from '@/features/dashboard/KPICard';
-import { RevenueChart } from '@/features/dashboard/RevenueChart';
-import { ComparisonChart } from '@/features/dashboard/ComparisonChart';
-
-function toDate(ts: any): Date | null {
-  if (!ts) return null;
-  if (typeof ts?.toDate === 'function') return ts.toDate();
-  if (ts instanceof Date) return ts;
-  const d = new Date(ts);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
 
 export default function Dashboard() {
-  const { profile } = useAuth();
-  const teamId = profile!.teamId;
+  const { user } = useAuth();
+  const { data, isLoading } = useQuery({
+    queryKey: ['dashboard'],
+    queryFn: () => api.get<{ report: DashboardReport }>('/api/analytics/dashboard'),
+  });
+  const usersQ = useQuery({
+    queryKey: ['users'],
+    queryFn: () => api.get<{ users: PublicUser[] }>('/api/users'),
+  });
 
-  const { data: deals } = useCollection<Deal>('deals', where('teamId', '==', teamId));
-  const { data: contacts } = useCollection<Contact>('contacts', where('teamId', '==', teamId));
-  const { data: events } = useCollection<EventDoc>('events', where('teamId', '==', teamId));
-  const { data: stages } = useCollection<Stage>(`teams/${teamId}/stages`);
+  const userName = (id: string | null): string => {
+    if (!id) return '—';
+    return usersQ.data?.users.find((u) => u.id === id)?.name ?? id.slice(0, 6);
+  };
 
-  const kpis = useMemo(() => {
-    const now = new Date();
-    const curStart = startOfMonth(now);
-    const curEnd = endOfMonth(now);
-    const prevRef = subMonths(now, 1);
-    const prevStart = startOfMonth(prevRef);
-    const prevEnd = endOfMonth(prevRef);
-
-    const wonStageIds = new Set(stages.filter((s) => s.isClosedWon).map((s) => s.id));
-
-    const inRange = (d: Date | null, start: Date, end: Date) =>
-      !!d && d >= start && d <= end;
-
-    // Leads del mes
-    let leadsCur = 0;
-    let leadsPrev = 0;
-    for (const c of contacts) {
-      const d = toDate(c.createdAt);
-      if (inRange(d, curStart, curEnd)) leadsCur++;
-      else if (inRange(d, prevStart, prevEnd)) leadsPrev++;
-    }
-
-    // Deals totales / cerrados por mes (basado en createdAt) + revenue (basado en closedAt)
-    let dealsTotalCur = 0;
-    let dealsTotalPrev = 0;
-    let dealsClosedCur = 0;
-    let dealsClosedPrev = 0;
-    let revenueCur = 0;
-    let revenuePrev = 0;
-
-    for (const deal of deals) {
-      const created = toDate(deal.createdAt);
-      const closed = toDate(deal.closedAt);
-      const isWon = wonStageIds.has(deal.stageId);
-
-      if (inRange(created, curStart, curEnd)) dealsTotalCur++;
-      else if (inRange(created, prevStart, prevEnd)) dealsTotalPrev++;
-
-      if (isWon && inRange(closed, curStart, curEnd)) {
-        dealsClosedCur++;
-        revenueCur += Number(deal.value) || 0;
-      } else if (isWon && inRange(closed, prevStart, prevEnd)) {
-        dealsClosedPrev++;
-        revenuePrev += Number(deal.value) || 0;
-      }
-    }
-
-    const closeRateCur = dealsTotalCur > 0 ? (dealsClosedCur / dealsTotalCur) * 100 : 0;
-    const closeRatePrev = dealsTotalPrev > 0 ? (dealsClosedPrev / dealsTotalPrev) * 100 : 0;
-
-    // Reuniones agendadas (start >= hoy) vs últimos 30d como comparativa "anterior"
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const thirtyAgo = subMonths(today, 1);
-    let meetingsUpcoming = 0;
-    let meetingsPrev = 0;
-    for (const e of events) {
-      if (e.status === 'canceled') continue;
-      const s = toDate(e.start);
-      if (!s) continue;
-      if (s >= today) meetingsUpcoming++;
-      else if (s >= thirtyAgo && s < today) meetingsPrev++;
-    }
-
-    return {
-      leadsCur,
-      leadsPrev,
-      closeRateCur,
-      closeRatePrev,
-      revenueCur,
-      revenuePrev,
-      meetingsUpcoming,
-      meetingsPrev,
-    };
-  }, [deals, contacts, events, stages]);
+  const report = data?.report;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-semibold">Dashboard</h1>
-        <p className="text-sm text-text-dim">Todo en tiempo real</p>
+        <h1 className="text-2xl font-semibold">Hola{user?.name ? `, ${user.name.split(' ')[0]}` : ''}</h1>
+        <p className="text-sm text-text-dim">Resumen del pipeline de leads.</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KPICard
-          label="Leads del mes"
-          value={kpis.leadsCur}
-          prev={kpis.leadsPrev}
-          icon={TrendingUp}
-          format="number"
+      <div className="grid gap-3 md:grid-cols-4">
+        <Kpi
+          label="Leads totales"
+          value={report?.totals.total ?? 0}
+          icon={<Inbox size={16} />}
+          loading={isLoading}
         />
-        <KPICard
-          label="Tasa de cierre"
-          value={kpis.closeRateCur}
-          prev={kpis.closeRatePrev}
-          icon={Target}
-          format="percent"
+        <Kpi
+          label="Asignados hoy"
+          value={report?.todayAssigned ?? 0}
+          icon={<Target size={16} />}
+          loading={isLoading}
+          color="text-brand-400"
         />
-        <KPICard
-          label="Revenue del mes"
-          value={kpis.revenueCur}
-          prev={kpis.revenuePrev}
-          icon={DollarSign}
-          format="currency"
+        <Kpi
+          label="Convertidos"
+          value={report?.totals.converted ?? 0}
+          icon={<CheckCircle2 size={16} />}
+          loading={isLoading}
+          color="text-emerald-400"
         />
-        <KPICard
-          label="Reuniones agendadas"
-          value={kpis.meetingsUpcoming}
-          prev={kpis.meetingsPrev}
-          icon={Calendar}
-          format="number"
+        <Kpi
+          label="Para reciclar"
+          value={report?.pendingRecycling ?? 0}
+          icon={<Recycle size={16} />}
+          loading={isLoading}
+          color={report && report.pendingRecycling > 0 ? 'text-amber-400' : undefined}
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <div className="md:col-span-2">
-          <RevenueChart deals={deals} stages={stages} />
-        </div>
-        <div className="md:col-span-2">
-          <ComparisonChart deals={deals} contacts={contacts} stages={stages} />
-        </div>
+      <div className="grid gap-4 md:grid-cols-[1.2fr_1fr]">
+        <section className="rounded-lg border border-border bg-bg-soft p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-text-dim">Funnel</h2>
+            <Link to="/app/sources" className="text-xs text-brand-400 hover:underline">
+              <TrendingUp size={12} className="mr-1 inline" /> Ver por fuente
+            </Link>
+          </div>
+          {report && <FunnelList totals={report.totals} />}
+        </section>
+
+        <section className="rounded-lg border border-border bg-bg-soft p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-text-dim">Para reciclar</h2>
+            {user?.role === 'owner' && (
+              <Link
+                to="/app/settings/recycling"
+                className="text-xs text-brand-400 hover:underline"
+              >
+                Configurar
+              </Link>
+            )}
+          </div>
+          {report && report.pendingRecycling === 0 && (
+            <div className="text-sm text-text-dim">Nada pendiente. Todo limpio.</div>
+          )}
+          {report && report.pendingRecycling > 0 && (
+            <div className="flex items-center gap-3 rounded-md border border-amber-500/30 bg-amber-500/10 p-3">
+              <AlertTriangle size={18} className="text-amber-400" />
+              <div className="flex-1 text-sm">
+                <div className="font-medium">
+                  {report.pendingRecycling} lead
+                  {report.pendingRecycling === 1 ? '' : 's'} para reciclar
+                </div>
+                <div className="text-xs text-text-dim">
+                  {user?.role === 'owner'
+                    ? 'Corré el ciclo manual o esperá al cron diario.'
+                    : 'El dueño configurará cuándo se reciclan.'}
+                </div>
+              </div>
+              {user?.role === 'owner' && (
+                <Link to="/app/settings/recycling" className="btn-outline text-xs">
+                  Revisar
+                </Link>
+              )}
+            </div>
+          )}
+        </section>
       </div>
+
+      <section className="rounded-lg border border-border bg-bg-soft p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-text-dim">Últimos leads</h2>
+          <Link to="/app/leads" className="text-xs text-brand-400 hover:underline">
+            Ver todos
+          </Link>
+        </div>
+        <div className="divide-y divide-border">
+          {!isLoading && report?.recentLeads.length === 0 && (
+            <div className="py-6 text-center text-sm text-text-dim">
+              Aún no hay leads. <Link to="/app/leads/import" className="text-brand-400">Importá</Link>.
+            </div>
+          )}
+          {report?.recentLeads.map((l) => (
+            <div key={l.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+              <div className="min-w-0 flex-1">
+                <Link to={`/app/leads/${l.id}`} className="text-brand-400 hover:underline">
+                  {l.name ?? <span className="italic text-text-faint">Sin nombre</span>}
+                </Link>
+                <div className="text-xs text-text-faint">
+                  <span className="font-mono">{l.phone}</span> · {l.source}
+                </div>
+              </div>
+              <div className="text-right text-xs">
+                <div className="font-mono uppercase tracking-wide text-text-dim">{l.status}</div>
+                <div className="text-text-faint">
+                  {userName(l.assignedTo)} ·{' '}
+                  {formatDistanceToNow(new Date(l.createdAt), { addSuffix: true, locale: es })}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function Kpi({
+  label,
+  value,
+  icon,
+  color,
+  loading,
+}: {
+  label: string;
+  value: number;
+  icon: React.ReactNode;
+  color?: string;
+  loading?: boolean;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-bg-soft p-4">
+      <div className="flex items-center justify-between text-xs uppercase tracking-wide text-text-faint">
+        <span>{label}</span>
+        <span className="text-text-dim">{icon}</span>
+      </div>
+      <div className={`mt-1 text-2xl font-semibold ${color ?? 'text-text'}`}>
+        {loading ? '…' : value}
+      </div>
+    </div>
+  );
+}
+
+function FunnelList({ totals }: { totals: DashboardReport['totals'] }) {
+  const stages: Array<{ key: keyof DashboardReport['totals']; label: string; color: string }> = [
+    { key: 'new', label: 'Nuevos', color: 'bg-brand-500/60' },
+    { key: 'assigned', label: 'Asignados', color: 'bg-amber-500/60' },
+    { key: 'contacted', label: 'Contactados', color: 'bg-sky-500/60' },
+    { key: 'responded', label: 'Respondieron', color: 'bg-emerald-500/60' },
+    { key: 'converted', label: 'Convertidos', color: 'bg-green-500/70' },
+    { key: 'discarded', label: 'Descartados', color: 'bg-red-500/60' },
+  ];
+  const max = Math.max(1, ...stages.map((s) => totals[s.key]));
+  return (
+    <div className="space-y-2">
+      {stages.map((s) => {
+        const v = totals[s.key];
+        const pct = v === 0 ? 0 : Math.max(5, (v / max) * 100);
+        return (
+          <div key={s.key}>
+            <div className="mb-1 flex items-center justify-between text-xs">
+              <span className="text-text-dim">{s.label}</span>
+              <span className="font-mono text-text">{v}</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-bg/40">
+              <div className={`h-full rounded-full ${s.color}`} style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
