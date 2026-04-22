@@ -24,6 +24,28 @@ param(
     [int]$Port = 3180
 )
 
+# Restore Windows standard PATH. Some PCs (corporate profiles, AnyDesk shells,
+# WinSW/SYSTEM with stripped env) ship without System32 in PATH, which makes
+# `robocopy`, `netsh`, `sc`, etc. fail with CommandNotFoundException.
+# Harmless when PATH is already correct — we just prepend the canonical dirs.
+$env:PATH = "$env:SystemRoot\System32;$env:SystemRoot;$env:SystemRoot\System32\Wbem;$env:SystemRoot\System32\WindowsPowerShell\v1.0;$env:PATH"
+
+# Boot marker: write BEFORE any other logic so we can prove PowerShell
+# actually started the script, even if $ErrorActionPreference later kills us.
+try {
+    $bootMarker = Join-Path $env:ProgramData 'MyCRM\logs\update-boot.log'
+    $bootDir = Split-Path $bootMarker -Parent
+    if (-not (Test-Path $bootDir)) {
+        New-Item $bootDir -ItemType Directory -Force | Out-Null
+    }
+    $bootLine = "[{0}] update.ps1 booted: target={1} pid={2} user={3}" -f `
+        (Get-Date -Format 'yyyy-MM-ddTHH:mm:ss'), $TargetVersion, $PID, $env:USERNAME
+    Add-Content -Path $bootMarker -Value $bootLine -Encoding UTF8
+} catch {
+    # If we can't even write a marker, continue anyway — downstream logging
+    # will capture the crash.
+}
+
 $ErrorActionPreference = 'Stop'
 $ts = Get-Date -Format 'yyyyMMdd-HHmmss'
 $backupRoot = Join-Path $env:ProgramData 'MyCRM\backups'

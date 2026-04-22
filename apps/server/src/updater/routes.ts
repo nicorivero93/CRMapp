@@ -197,7 +197,28 @@ export async function registerUpdaterRoutes(app: App): Promise<void> {
       );
     } catch { /* ignore */ }
 
+    // Capture child's stdout + stderr to a dedicated file so if PowerShell dies
+    // early (execution policy, AV, missing DLL…) we can see what happened.
+    const spawnLogPath = path.join(
+      logDir,
+      `update-spawn-${startedAt.replace(/[:.]/g, '-')}.log`,
+    );
+    let spawnLogFd: number | null = null;
+    try {
+      spawnLogFd = fs.openSync(spawnLogPath, 'a');
+      fs.writeSync(
+        spawnLogFd,
+        `[${startedAt}] === spawn begin: psExe=${psExe} script=${script} target=${target}\n`,
+      );
+    } catch (err) {
+      logger.warn({ err }, 'updater: could not open spawn log');
+    }
+
     logger.info({ script, target, psExe }, 'updater: launching update script');
+    // Note: we do NOT override `env` here. Inheriting the parent env avoids
+    // subtle Path/PATH case conflicts that were suspected of making the child
+    // die before running the first line of update.ps1. psExe is already an
+    // absolute path, so PATH is not needed to locate PowerShell itself.
     const child = spawn(
       psExe,
       [
@@ -210,20 +231,30 @@ export async function registerUpdaterRoutes(app: App): Promise<void> {
       {
         cwd: path.dirname(script),
         detached: true,
-        stdio: 'ignore',
+        stdio: spawnLogFd != null ? ['ignore', spawnLogFd, spawnLogFd] : 'ignore',
         windowsHide: true,
-        env: {
-          ...process.env,
-          PATH: `${systemRoot}\\System32;${systemRoot};${systemRoot}\\System32\\Wbem;${systemRoot}\\System32\\WindowsPowerShell\\v1.0;${process.env.PATH ?? ''}`,
-        },
       },
     );
+    try {
+      fs.appendFileSync(
+        markerPath,
+        `[${new Date().toISOString()}] spawn ok: pid=${child.pid}\n`,
+      );
+    } catch { /* ignore */ }
     child.on('error', (err) => {
       logger.error({ err: err.message, psExe, script }, 'updater: spawn failed');
       try {
         fs.appendFileSync(
           markerPath,
           `[${new Date().toISOString()}] spawn error: ${err.message}\n`,
+        );
+      } catch { /* ignore */ }
+    });
+    child.on('exit', (code, signal) => {
+      try {
+        fs.appendFileSync(
+          markerPath,
+          `[${new Date().toISOString()}] child exited: code=${code} signal=${signal}\n`,
         );
       } catch { /* ignore */ }
     });
