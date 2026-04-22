@@ -46,8 +46,16 @@ afterAll(async () => {
 
 beforeEach(async () => {
   const sql = getRawSqlite();
-  sql.exec('DELETE FROM lead_events; DELETE FROM leads; DELETE FROM import_batches; DELETE FROM sessions; DELETE FROM users;');
+  sql.exec('DELETE FROM lead_events; DELETE FROM leads; DELETE FROM import_batches; DELETE FROM sessions; DELETE FROM users; DELETE FROM app_settings;');
   ownerCookie = await signupOwner();
+  // These tests predate the assignment engine; set manual-only so auto-assign
+  // doesn't move leads out of `new` status or add `assigned` events.
+  await app.inject({
+    method: 'PATCH',
+    url: '/api/settings',
+    headers: { cookie: ownerCookie },
+    payload: { assignmentMode: 'manual-only' },
+  });
 });
 
 describe('POST /api/leads/paste', () => {

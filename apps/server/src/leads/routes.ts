@@ -3,6 +3,7 @@ import type { CountryCode } from 'libphonenumber-js';
 import { leads, leadEvents, importBatches, type LeadRow, type LeadEventRow } from '@mycrm/db';
 import {
   addLeadEventSchema,
+  assignLeadsSchema,
   createLeadSchema,
   leadListQuerySchema,
   patchLeadSchema,
@@ -17,9 +18,10 @@ import { getDb } from '../db/client.js';
 import { newId } from '../lib/ids.js';
 import { AppError } from '../lib/errors.js';
 import { normalizePhone, phoneKey } from '../lib/phone.js';
-import { requireAuth } from '../auth/middleware.js';
+import { requireAuth, requireRole } from '../auth/middleware.js';
 import { broadcast } from '../stream/sse.js';
 import { dedupBatch, parseCsvBuffer, parsePasteText, type ParsedLead } from './ingestion.js';
+import { runAssignment } from './assignmentService.js';
 
 type App = Awaited<ReturnType<typeof buildApp>>;
 
@@ -203,9 +205,10 @@ export async function registerLeadRoutes(app: App): Promise<void> {
       now: new Date(),
     });
     if (!row) throw new AppError('INTERNAL', 'No se pudo crear el lead', 500);
-    const dto = toDTO(row);
-    broadcast('lead.created', dto);
-    reply.status(201).send({ lead: dto });
+    broadcast('lead.created', toDTO(row));
+    runAssignment({ leadIds: [row.id], byUserId: req.currentUser!.id });
+    const refreshed = getDb().select().from(leads).where(eq(leads.id, row.id)).get()!;
+    reply.status(201).send({ lead: toDTO(refreshed) });
   });
 
   app.patch('/api/leads/:id', { preHandler: requireAuth }, async (req) => {
@@ -315,6 +318,7 @@ export async function registerLeadRoutes(app: App): Promise<void> {
       .run();
 
     broadcast('lead.imported', { batchId, imported: createdIds.length });
+    const assignReport = runAssignment({ leadIds: createdIds, byUserId: req.currentUser!.id });
 
     reply.status(201).send({
       batchId,
@@ -323,6 +327,8 @@ export async function registerLeadRoutes(app: App): Promise<void> {
       deduped: inBatchDupes + dedupedAgainstDb,
       errors: parsed.errors.length,
       errorsSample,
+      assigned: assignReport.assigned.length,
+      unassigned: assignReport.unassigned.length,
     });
   });
 
@@ -351,7 +357,7 @@ export async function registerLeadRoutes(app: App): Promise<void> {
     const now = new Date();
     const batchId = newId();
 
-    let createdCount = 0;
+    const createdIds: string[] = [];
     for (const l of toInsert) {
       const row = insertParsedLead({
         parsed: l,
@@ -360,7 +366,7 @@ export async function registerLeadRoutes(app: App): Promise<void> {
         createdBy: req.currentUser!.id,
         now,
       });
-      if (row) createdCount++;
+      if (row) createdIds.push(row.id);
     }
 
     const errorsSample = parsed.errors.slice(0, 20);
@@ -371,7 +377,7 @@ export async function registerLeadRoutes(app: App): Promise<void> {
         source: meta.source,
         fileName,
         totalRows: parsed.totalRows,
-        imported: createdCount,
+        imported: createdIds.length,
         deduped: inBatchDupes + dedupedAgainstDb,
         errors: parsed.errors.length,
         errorsSample,
@@ -380,15 +386,46 @@ export async function registerLeadRoutes(app: App): Promise<void> {
       })
       .run();
 
-    broadcast('lead.imported', { batchId, imported: createdCount });
+    broadcast('lead.imported', { batchId, imported: createdIds.length });
+    const assignReport = runAssignment({ leadIds: createdIds, byUserId: req.currentUser!.id });
 
     reply.status(201).send({
       batchId,
       totalRows: parsed.totalRows,
-      imported: createdCount,
+      imported: createdIds.length,
       deduped: inBatchDupes + dedupedAgainstDb,
       errors: parsed.errors.length,
       errorsSample,
+      assigned: assignReport.assigned.length,
+      unassigned: assignReport.unassigned.length,
     });
+  });
+
+  app.post('/api/leads/assign', { preHandler: requireRole('owner') }, async (req) => {
+    const body = assignLeadsSchema.parse(req.body);
+    const db = getDb();
+    let leadIds: string[];
+    if (body.leadIds && body.leadIds.length > 0) {
+      leadIds = body.leadIds;
+    } else if (body.allUnassigned) {
+      const rows = db
+        .select({ id: leads.id })
+        .from(leads)
+        .where(and(eq(leads.status, 'new'), sql`${leads.assignedTo} IS NULL`))
+        .all();
+      leadIds = rows.map((r) => r.id);
+    } else {
+      throw new AppError('BAD_REQUEST', 'Especificá leadIds o allUnassigned=true', 400);
+    }
+    if (leadIds.length === 0) {
+      return { assigned: [], unassigned: [], perUser: {}, total: 0 };
+    }
+    const report = runAssignment({
+      leadIds,
+      byUserId: req.currentUser!.id,
+      excludeUserId: body.excludeUserId,
+      forceMode: 'capacity-weighted',
+    });
+    return { ...report, total: leadIds.length };
   });
 }
