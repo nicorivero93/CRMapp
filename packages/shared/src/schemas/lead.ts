@@ -112,6 +112,8 @@ export interface LeadDTO {
   noResponseCount: number;
   recycledCount: number;
   lastRecycledAt: string | null;
+  convertedContactId: string | null;
+  convertedDealId: string | null;
   tags: string[];
   notes: string | null;
   createdAt: string;

@@ -207,6 +207,45 @@ export const appSettings = sqliteTable('app_settings', {
   value: text('value', { mode: 'json' }).notNull(),
 });
 
+export const events = sqliteTable(
+  'events',
+  {
+    id: text('id').primaryKey(),
+    title: text('title').notNull(),
+    description: text('description'),
+    start: integer('start', { mode: 'timestamp' }).notNull(),
+    end: integer('end', { mode: 'timestamp' }).notNull(),
+    status: text('status', { enum: ['confirmed', 'canceled'] })
+      .notNull()
+      .default('confirmed'),
+    ownerId: text('owner_id').references(() => users.id),
+    leadId: text('lead_id').references(() => leads.id),
+    contactId: text('contact_id').references(() => contacts.id),
+    dealId: text('deal_id').references(() => deals.id),
+    attendees: text('attendees', { mode: 'json' }).$type<string[]>().default([]),
+    color: text('color'),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+  },
+  (t) => ({
+    ownerStartIdx: index('events_owner_start').on(t.ownerId, t.start),
+    startIdx: index('events_start').on(t.start),
+  }),
+);
+
+export const automationRules = sqliteTable('automation_rules', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  trigger: text('trigger', { mode: 'json' }).notNull(),
+  conditions: text('conditions', { mode: 'json' }).$type<unknown[]>().default([]),
+  actions: text('actions', { mode: 'json' }).notNull(),
+  lastRunAt: integer('last_run_at', { mode: 'timestamp' }),
+  runCount: integer('run_count').notNull().default(0),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
 export type UserRow = typeof users.$inferSelect;
 export type NewUserRow = typeof users.$inferInsert;
 export type SessionRow = typeof sessions.$inferSelect;
@@ -220,3 +259,5 @@ export type StageRow = typeof stages.$inferSelect;
 export type AppSettingRow = typeof appSettings.$inferSelect;
 export type MessageTemplateRow = typeof messageTemplates.$inferSelect;
 export type RecyclingRuleRow = typeof recyclingRules.$inferSelect;
+export type EventRow = typeof events.$inferSelect;
+export type AutomationRuleRow = typeof automationRules.$inferSelect;
