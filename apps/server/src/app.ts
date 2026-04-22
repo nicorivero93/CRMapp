@@ -18,6 +18,7 @@ import { registerRecyclingRoutes } from './recycling/routes.js';
 import { registerAnalyticsRoutes } from './analytics/routes.js';
 import { registerWhatsAppWebhookRoutes } from './whatsapp/webhookRoutes.js';
 import { registerWhatsAppSettingsRoutes } from './whatsapp/settingsRoutes.js';
+import { registerStaticRoutes } from './static/routes.js';
 
 export async function buildApp() {
   const app = Fastify({
@@ -43,6 +44,8 @@ export async function buildApp() {
   await registerAnalyticsRoutes(app);
   await registerWhatsAppWebhookRoutes(app);
   await registerWhatsAppSettingsRoutes(app);
+  // Register last: its SPA fallback catches all unhandled GETs.
+  await registerStaticRoutes(app);
 
   return app;
 }

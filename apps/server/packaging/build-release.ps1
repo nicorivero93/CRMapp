@@ -56,6 +56,23 @@ Copy-Item (Join-Path $distDir 'server-bundle.cjs') (Join-Path $releaseDir 'serve
 # 3. Copy migrations
 Copy-Item (Join-Path $distDir 'drizzle') (Join-Path $releaseDir 'drizzle') -Recurse
 
+# 3b. Build + copy the web UI so the server can serve it at `/`.
+#     The static/routes.ts loader looks for `<server-root>/public/index.html`.
+Write-Host "-> Building web UI (apps/web)..." -ForegroundColor Yellow
+$webRoot = Resolve-Path (Join-Path $repoRoot 'apps\web')
+Push-Location $webRoot
+try {
+    cmd /c "npm run build"
+    if ($LASTEXITCODE -ne 0) { throw "web build failed" }
+} finally {
+    Pop-Location
+}
+$webDist = Join-Path $webRoot 'dist'
+$publicDst = Join-Path $releaseDir 'public'
+if (-not (Test-Path $webDist)) { throw "web dist missing at $webDist" }
+Copy-Item $webDist $publicDst -Recurse
+Write-Host "   copied web UI to release/public/"
+
 # 4. Install runtime-only external npm packages into the release folder.
 #    better-sqlite3, @node-rs/argon2, pino, thread-stream, pino-pretty have
 #    native addons or worker threads that break when bundled by esbuild.
