@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, KanbanSquare, Users, Calendar, Zap, Settings, Sparkles, Inbox, Upload, Target } from 'lucide-react';
+import { LayoutDashboard, KanbanSquare, Users, Calendar, Zap, Settings, Sparkles, Inbox, Upload, Target, Phone } from 'lucide-react';
 import clsx from 'clsx';
 
 const items = [
@@ -7,6 +7,7 @@ const items = [
   { to: '/app/leads/mine', label: 'Mis leads', icon: Target, end: true },
   { to: '/app/leads', label: 'Todos los leads', icon: Inbox, end: true },
   { to: '/app/leads/import', label: 'Importar', icon: Upload, end: true },
+  { to: '/app/lines', label: 'Mis líneas', icon: Phone, end: true },
   { to: '/app/pipeline', label: 'Pipeline', icon: KanbanSquare, end: true },
   { to: '/app/contacts', label: 'Contactos', icon: Users, end: true },
   { to: '/app/calendar', label: 'Calendario', icon: Calendar, end: true },

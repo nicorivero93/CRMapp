@@ -4,9 +4,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import toast from 'react-hot-toast';
-import { ArrowLeft, MessageSquarePlus, Phone, ChevronDown } from 'lucide-react';
+import { ArrowLeft, MessageSquarePlus, Phone, ChevronDown, MessageCircle } from 'lucide-react';
 import type { LeadDTO, LeadEventDTO, LeadStatus } from '@mycrm/shared';
 import { api } from '@/lib/api';
+import { WhatsAppLauncher } from '@/components/WhatsAppLauncher';
 
 const STATUS_LABELS: Record<LeadStatus, string> = {
   new: 'Nuevo',
@@ -41,6 +42,7 @@ export default function LeadDetail() {
   const { id = '' } = useParams<{ id: string }>();
   const qc = useQueryClient();
   const [note, setNote] = useState('');
+  const [waOpen, setWaOpen] = useState(false);
 
   const { data, isLoading, error } = useQuery<DetailResponse>({
     queryKey: ['lead', id],
@@ -73,7 +75,6 @@ export default function LeadDetail() {
   if (error || !data) return <div className="text-sm text-red-400">No se pudo cargar el lead.</div>;
 
   const { lead, events } = data;
-  const waHref = `https://wa.me/${lead.phoneNormalized.replace(/\D/g, '')}`;
 
   return (
     <div className="max-w-4xl space-y-5">
@@ -94,9 +95,9 @@ export default function LeadDetail() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <a href={waHref} target="_blank" rel="noopener noreferrer" className="btn-outline">
-            WhatsApp
-          </a>
+          <button onClick={() => setWaOpen(true)} className="btn-primary">
+            <MessageCircle size={14} /> WhatsApp
+          </button>
           <div className="relative">
             <select
               className="input appearance-none pr-8"
@@ -187,6 +188,8 @@ export default function LeadDetail() {
           </div>
         </section>
       </div>
+
+      {waOpen && <WhatsAppLauncher lead={lead} onClose={() => setWaOpen(false)} />}
     </div>
   );
 }

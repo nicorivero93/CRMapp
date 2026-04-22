@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Zap, ChevronRight } from 'lucide-react';
+import { Zap, ChevronRight, MessageSquare } from 'lucide-react';
 import { api, type PublicUser } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
@@ -19,21 +19,40 @@ export default function Settings() {
       </div>
 
       {user?.role === 'owner' && (
-        <Link
-          to="/app/settings/assignment"
-          className="flex items-center justify-between rounded-lg border border-border bg-bg-soft p-4 transition-colors hover:bg-bg-hover"
-        >
-          <div className="flex items-center gap-3">
-            <div className="grid h-9 w-9 place-items-center rounded-lg bg-brand-500/15 text-brand-400">
-              <Zap size={16} />
+        <>
+          <Link
+            to="/app/settings/assignment"
+            className="flex items-center justify-between rounded-lg border border-border bg-bg-soft p-4 transition-colors hover:bg-bg-hover"
+          >
+            <div className="flex items-center gap-3">
+              <div className="grid h-9 w-9 place-items-center rounded-lg bg-brand-500/15 text-brand-400">
+                <Zap size={16} />
+              </div>
+              <div>
+                <div className="text-sm font-medium">Asignación de leads</div>
+                <div className="text-xs text-text-dim">Modo, targets diarios, reparto manual.</div>
+              </div>
             </div>
-            <div>
-              <div className="text-sm font-medium">Asignación de leads</div>
-              <div className="text-xs text-text-dim">Modo, targets diarios, reparto manual.</div>
+            <ChevronRight size={16} className="text-text-faint" />
+          </Link>
+          <Link
+            to="/app/settings/templates"
+            className="flex items-center justify-between rounded-lg border border-border bg-bg-soft p-4 transition-colors hover:bg-bg-hover"
+          >
+            <div className="flex items-center gap-3">
+              <div className="grid h-9 w-9 place-items-center rounded-lg bg-brand-500/15 text-brand-400">
+                <MessageSquare size={16} />
+              </div>
+              <div>
+                <div className="text-sm font-medium">Templates de WhatsApp</div>
+                <div className="text-xs text-text-dim">
+                  Mensajes reusables con variables que las vendedoras eligen al enviar.
+                </div>
+              </div>
             </div>
-          </div>
-          <ChevronRight size={16} className="text-text-faint" />
-        </Link>
+            <ChevronRight size={16} className="text-text-faint" />
+          </Link>
+        </>
       )}
 
       <section className="rounded-lg border border-border bg-bg-soft p-4">
