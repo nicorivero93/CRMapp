@@ -12,3 +12,4 @@ functions/lib/
 .vscode/
 .idea/
 coverage/
+mycrm-local*.zip
