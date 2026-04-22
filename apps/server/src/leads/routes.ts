@@ -1,6 +1,15 @@
 import { and, desc, eq, inArray, like, or, sql } from 'drizzle-orm';
 import type { CountryCode } from 'libphonenumber-js';
-import { leads, leadEvents, importBatches, type LeadRow, type LeadEventRow } from '@mycrm/db';
+import {
+  leads,
+  leadEvents,
+  importBatches,
+  messageTemplates,
+  users,
+  whatsappLines,
+  type LeadRow,
+  type LeadEventRow,
+} from '@mycrm/db';
 import {
   addLeadEventSchema,
   assignLeadsSchema,
@@ -9,6 +18,7 @@ import {
   patchLeadSchema,
   pasteLeadsSchema,
   importLeadsMetaSchema,
+  sendWhatsAppSchema,
   type LeadDTO,
   type LeadEventDTO,
   type LeadSource,
@@ -22,6 +32,9 @@ import { requireAuth, requireRole } from '../auth/middleware.js';
 import { broadcast } from '../stream/sse.js';
 import { dedupBatch, parseCsvBuffer, parsePasteText, type ParsedLead } from './ingestion.js';
 import { runAssignment } from './assignmentService.js';
+import { getWhatsAppChannel } from '../whatsapp/channel.js';
+import { interpolate, todayStringInTZ } from '../whatsapp/templates.js';
+import { getSettings } from '../settings/service.js';
 
 type App = Awaited<ReturnType<typeof buildApp>>;
 
@@ -427,5 +440,117 @@ export async function registerLeadRoutes(app: App): Promise<void> {
       forceMode: 'capacity-weighted',
     });
     return { ...report, total: leadIds.length };
+  });
+
+  app.post('/api/leads/:id/whatsapp', { preHandler: requireAuth }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = sendWhatsAppSchema.parse(req.body);
+    const db = getDb();
+    const me = req.currentUser!;
+
+    const lead = db.select().from(leads).where(eq(leads.id, id)).get();
+    if (!lead) throw new AppError('NOT_FOUND', 'Lead no encontrado', 404);
+
+    if (!me.activeLineId) {
+      throw new AppError(
+        'NO_ACTIVE_LINE',
+        'No tenés una línea de WhatsApp activa. Configurala en Mis líneas.',
+        400,
+      );
+    }
+    const line = db.select().from(whatsappLines).where(eq(whatsappLines.id, me.activeLineId)).get();
+    if (!line || line.ownerId !== me.id) {
+      throw new AppError('NO_ACTIVE_LINE', 'Tu línea activa no está disponible.', 400);
+    }
+
+    let messageBody: string;
+    let templateId: string | null = null;
+    if (body.templateId) {
+      const tpl = db
+        .select()
+        .from(messageTemplates)
+        .where(eq(messageTemplates.id, body.templateId))
+        .get();
+      if (!tpl) throw new AppError('NOT_FOUND', 'Template no encontrado', 404);
+      if (!tpl.isActive) throw new AppError('BAD_REQUEST', 'Template inactivo', 400);
+      templateId = tpl.id;
+      const settings = getSettings();
+      messageBody = interpolate(tpl.body, {
+        name: lead.name,
+        phone: lead.phone,
+        sellerName: me.name,
+        today: todayStringInTZ(settings.timezone),
+      });
+    } else {
+      messageBody = body.body!;
+    }
+
+    const channel = getWhatsAppChannel();
+    const result = await channel.send({ to: lead.phoneNormalized, body: messageBody });
+    if (result.type !== 'link') {
+      // Manual flow only for L2.5. Provider channels come in L2.8.
+      throw new AppError('NOT_IMPLEMENTED', 'Canal no soportado todavía', 501);
+    }
+
+    const now = new Date();
+    const eventMeta = {
+      lineId: line.id,
+      templateId,
+      preview: messageBody.slice(0, 500),
+    };
+    db.insert(leadEvents)
+      .values({
+        id: newId(),
+        leadId: lead.id,
+        at: now,
+        type: 'wa-opened',
+        byUserId: me.id,
+        meta: eventMeta,
+      })
+      .run();
+    db.insert(leadEvents)
+      .values({
+        id: newId(),
+        leadId: lead.id,
+        at: new Date(now.getTime() + 1),
+        type: 'message-sent',
+        byUserId: me.id,
+        meta: eventMeta,
+      })
+      .run();
+
+    const nextStatus = lead.status === 'assigned' || lead.status === 'new' ? 'contacted' : lead.status;
+    db.update(leads)
+      .set({
+        firstContactAt: lead.firstContactAt ?? now,
+        lastContactAt: now,
+        status: nextStatus,
+        updatedAt: now,
+      })
+      .where(eq(leads.id, lead.id))
+      .run();
+
+    db.update(whatsappLines)
+      .set({
+        dailyCount: line.dailyCount + 1,
+        lastUsedAt: now,
+      })
+      .where(eq(whatsappLines.id, line.id))
+      .run();
+
+    const updatedLead = db.select().from(leads).where(eq(leads.id, lead.id)).get()!;
+    const updatedLine = db.select().from(whatsappLines).where(eq(whatsappLines.id, line.id)).get()!;
+    broadcast('lead.updated', toDTO(updatedLead));
+    broadcast('lead.event-added', { leadId: lead.id });
+
+    reply.status(200).send({
+      url: result.url,
+      preview: result.preview,
+      line: {
+        id: updatedLine.id,
+        dailyCount: updatedLine.dailyCount,
+        dailyCapMessages: updatedLine.dailyCapMessages,
+      },
+    });
   });
 }
