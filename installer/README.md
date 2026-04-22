@@ -43,15 +43,30 @@ Y mandale ese `.zip` al cliente.
 
 ## 3. Conectar las PCs de las vendedoras
 
-En cada PC cliente, en PowerShell:
+Hay **3 opciones** — pick the one that molesta menos al cliente:
+
+### 3.a — App desktop (Tauri, recomendada)
+
+Los vendedores instalan una app nativa con icono en escritorio + ventana propia:
+
+1. Buildear una vez: `npm run build:desktop` desde la raíz del repo.
+2. Distribuir `apps/desktop/src-tauri/target/release/bundle/nsis/MyCRM_0.1.0_x64-setup.exe` (~15 MB).
+3. En cada PC cliente: doble-click al `.exe` → instala (user-scope, no pide admin).
+4. Primera apertura: wizard pregunta el IP/hostname del server. Tipea, "Conectar", listo.
+
+Detalle: [../apps/desktop/README.md](../apps/desktop/README.md).
+
+### 3.b — Acceso directo del navegador (sin instalar nada extra)
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File create-shortcut.ps1 -ServerHost 192.168.0.50
 ```
 
-(Reemplazá `192.168.0.50` por el IP de la PC host.) Eso crea `MyCRM.url` en el escritorio. Doble-click → abre MyCRM en el navegador.
+Eso crea `MyCRM.url` en el escritorio. Doble-click → abre MyCRM en el navegador default. Sirve si el cliente ya tiene Chrome/Edge y prefiere ahorrar 15 MB.
 
-Alternativa: en cualquier navegador, ir a `http://<IP-DEL-SERVIDOR>:3180`, hacer login, marcar como favorito.
+### 3.c — Favorito del navegador
+
+Cualquiera abre `http://<IP-SERVER>:3180` en Chrome/Edge/Firefox, loguea, marca como favorito. Cero instalación. Mismo CRM — el server sirve la UI web en esa URL.
 
 ## 4. Mantenimiento básico
 
