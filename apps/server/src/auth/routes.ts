@@ -23,6 +23,12 @@ function setSessionCookie(reply: FastifyReply, sid: string, expires: Date): void
 }
 
 export async function registerAuthRoutes(app: App): Promise<void> {
+  app.get('/api/auth/status', async () => {
+    const db = getDb();
+    const row = db.select({ n: sql<number>`count(*)` }).from(users).get();
+    return { ownerExists: !!row && row.n > 0 };
+  });
+
   app.post('/api/auth/signup-owner', async (req, reply) => {
     const db = getDb();
     const existing = db.select({ n: sql<number>`count(*)` }).from(users).get();
