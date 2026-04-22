@@ -11,9 +11,12 @@ import Automations from '@/routes/Automations';
 import Settings from '@/routes/Settings';
 
 function Protected({ children }: { children: JSX.Element }) {
-  const { user, loading } = useAuth();
+  const { user, loading, ownerExists } = useAuth();
   if (loading) return <div className="flex h-screen items-center justify-center text-text-dim">Cargando…</div>;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) {
+    if (ownerExists === false) return <Navigate to="/signup" replace />;
+    return <Navigate to="/login" replace />;
+  }
   return children;
 }
 
