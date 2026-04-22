@@ -5,6 +5,11 @@ REM  Runs from the release folder. Requires: Administrator.
 REM =============================================================
 setlocal EnableExtensions EnableDelayedExpansion
 
+REM --- Restore Windows standard PATH (algunas shells heredan un PATH stripped que rompe todo) ---
+REM %SystemRoot% lo setea el kernel, siempre apunta a C:\Windows. Con esto garantizamos que
+REM whoami, curl, sc, netsh, net, xcopy, etc. se resuelven aunque el PATH heredado este roto.
+set "PATH=%SystemRoot%\System32;%SystemRoot%;%SystemRoot%\System32\Wbem;%SystemRoot%\System32\WindowsPowerShell\v1.0;%PATH%"
+
 echo.
 echo === MyCRM Local Server install ===
 echo.
