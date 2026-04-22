@@ -10,7 +10,9 @@ import LeadsImport from '@/routes/LeadsImport';
 import LeadDetail from '@/routes/LeadDetail';
 import Lines from '@/routes/Lines';
 import Templates from '@/routes/Templates';
+import Sources from '@/routes/Sources';
 import SettingsAssignment from '@/routes/SettingsAssignment';
+import SettingsRecycling from '@/routes/SettingsRecycling';
 import Pipeline from '@/routes/Pipeline';
 import Contacts from '@/routes/Contacts';
 import Calendar from '@/routes/Calendar';
@@ -40,6 +42,7 @@ export default function App() {
         <Route path="leads/import" element={<LeadsImport />} />
         <Route path="leads/:id" element={<LeadDetail />} />
         <Route path="lines" element={<Lines />} />
+        <Route path="sources" element={<Sources />} />
         <Route path="pipeline" element={<Pipeline />} />
         <Route path="contacts" element={<Contacts />} />
         <Route path="calendar" element={<Calendar />} />
@@ -47,6 +50,7 @@ export default function App() {
         <Route path="settings" element={<Settings />} />
         <Route path="settings/assignment" element={<SettingsAssignment />} />
         <Route path="settings/templates" element={<Templates />} />
+        <Route path="settings/recycling" element={<SettingsRecycling />} />
       </Route>
       <Route path="*" element={<Navigate to="/app" replace />} />
     </Routes>
