@@ -4,6 +4,9 @@ import { AppShell } from '@/components/layout/AppShell';
 import Login from '@/routes/Login';
 import Signup from '@/routes/Signup';
 import Dashboard from '@/routes/Dashboard';
+import Leads from '@/routes/Leads';
+import LeadsImport from '@/routes/LeadsImport';
+import LeadDetail from '@/routes/LeadDetail';
 import Pipeline from '@/routes/Pipeline';
 import Contacts from '@/routes/Contacts';
 import Calendar from '@/routes/Calendar';
@@ -28,6 +31,9 @@ export default function App() {
       <Route path="/app" element={<Protected><AppShell /></Protected>}>
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
+        <Route path="leads" element={<Leads />} />
+        <Route path="leads/import" element={<LeadsImport />} />
+        <Route path="leads/:id" element={<LeadDetail />} />
         <Route path="pipeline" element={<Pipeline />} />
         <Route path="contacts" element={<Contacts />} />
         <Route path="calendar" element={<Calendar />} />

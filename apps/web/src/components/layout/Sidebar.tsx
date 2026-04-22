@@ -1,14 +1,16 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, KanbanSquare, Users, Calendar, Zap, Settings, Sparkles } from 'lucide-react';
+import { LayoutDashboard, KanbanSquare, Users, Calendar, Zap, Settings, Sparkles, Inbox, Upload } from 'lucide-react';
 import clsx from 'clsx';
 
 const items = [
-  { to: '/app/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/app/pipeline', label: 'Pipeline', icon: KanbanSquare },
-  { to: '/app/contacts', label: 'Contactos', icon: Users },
-  { to: '/app/calendar', label: 'Calendario', icon: Calendar },
-  { to: '/app/automations', label: 'Automatizaciones', icon: Zap },
-  { to: '/app/settings', label: 'Configuración', icon: Settings },
+  { to: '/app/dashboard', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/app/leads', label: 'Leads', icon: Inbox, end: true },
+  { to: '/app/leads/import', label: 'Importar', icon: Upload, end: true },
+  { to: '/app/pipeline', label: 'Pipeline', icon: KanbanSquare, end: true },
+  { to: '/app/contacts', label: 'Contactos', icon: Users, end: true },
+  { to: '/app/calendar', label: 'Calendario', icon: Calendar, end: true },
+  { to: '/app/automations', label: 'Automatizaciones', icon: Zap, end: true },
+  { to: '/app/settings', label: 'Configuración', icon: Settings, end: true },
 ];
 
 export function Sidebar() {
@@ -21,10 +23,11 @@ export function Sidebar() {
         <div className="font-semibold tracking-tight">MyCRM</div>
       </div>
       <nav className="flex flex-1 flex-col gap-1 px-3">
-        {items.map(({ to, label, icon: Icon }) => (
+        {items.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
             to={to}
+            end={end}
             className={({ isActive }) =>
               clsx(
                 'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
