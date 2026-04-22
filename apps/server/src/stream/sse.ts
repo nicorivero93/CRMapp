@@ -5,7 +5,14 @@ export type StreamEventType =
   | 'lead.created'
   | 'lead.updated'
   | 'lead.event-added'
-  | 'lead.imported';
+  | 'lead.imported'
+  | 'deal.moved'
+  | 'deal.created'
+  | 'deal.updated'
+  | 'deal.deleted'
+  | 'event.created'
+  | 'event.updated'
+  | 'event.canceled';
 
 export interface StreamEvent<T = unknown> {
   type: StreamEventType;

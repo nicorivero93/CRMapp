@@ -9,6 +9,7 @@ import { newId } from '../lib/ids.js';
 import { AppError } from '../lib/errors.js';
 import { hashPassword, verifyPassword } from './password.js';
 import { createSession, invalidateSession } from './session.js';
+import { seedDefaultStages } from '../stages/routes.js';
 import { SESSION_COOKIE, loadSession, publicUser, requireAuth } from './middleware.js';
 import { config } from '../config.js';
 
@@ -53,6 +54,8 @@ export async function registerAuthRoutes(app: App): Promise<void> {
       })
       .run();
     const user = db.select().from(users).where(eq(users.id, id)).get()!;
+    // Seed pipeline defaults for this brand-new installation.
+    try { seedDefaultStages(id); } catch (err) { req.log.warn({ err }, 'seedDefaultStages failed'); }
     const session = createSession(id);
     setSessionCookie(reply, session.id, session.expiresAt);
     reply.status(201).send({ user: publicUser(user) });

@@ -32,9 +32,25 @@ import { requireAuth, requireRole } from '../auth/middleware.js';
 import { broadcast } from '../stream/sse.js';
 import { dedupBatch, parseCsvBuffer, parsePasteText, type ParsedLead } from './ingestion.js';
 import { runAssignment } from './assignmentService.js';
+import { emit as emitAutomation } from '../automations/dispatcher.js';
 import { getWhatsAppChannel } from '../whatsapp/channel.js';
 import { interpolate, todayStringInTZ } from '../whatsapp/templates.js';
 import { getSettings } from '../settings/service.js';
+import { convertLeadToContact, contactToDTO } from '../contacts/routes.js';
+import { z } from 'zod';
+
+const convertLeadBodySchema = z
+  .object({
+    overrides: z
+      .object({
+        name: z.string().min(1).max(200).optional(),
+        email: z.string().email().max(254).nullable().optional(),
+        company: z.string().max(200).nullable().optional(),
+        industry: z.string().max(100).nullable().optional(),
+      })
+      .optional(),
+  })
+  .optional();
 
 type App = Awaited<ReturnType<typeof buildApp>>;
 
@@ -56,6 +72,8 @@ function toDTO(row: LeadRow): LeadDTO {
     noResponseCount: row.noResponseCount,
     recycledCount: row.recycledCount,
     lastRecycledAt: row.lastRecycledAt?.toISOString() ?? null,
+    convertedContactId: row.convertedContactId ?? null,
+    convertedDealId: row.convertedDealId ?? null,
     tags: (row.tags as string[] | null) ?? [],
     notes: row.notes,
     createdAt: row.createdAt.toISOString(),
@@ -218,7 +236,9 @@ export async function registerLeadRoutes(app: App): Promise<void> {
       now: new Date(),
     });
     if (!row) throw new AppError('INTERNAL', 'No se pudo crear el lead', 500);
-    broadcast('lead.created', toDTO(row));
+    const dto = toDTO(row);
+    broadcast('lead.created', dto);
+    void emitAutomation('lead.created', { source: row.source }, dto as unknown as Record<string, unknown>);
     runAssignment({ leadIds: [row.id], byUserId: req.currentUser!.id });
     const refreshed = getDb().select().from(leads).where(eq(leads.id, row.id)).get()!;
     reply.status(201).send({ lead: toDTO(refreshed) });
@@ -259,6 +279,13 @@ export async function registerLeadRoutes(app: App): Promise<void> {
     const updated = db.select().from(leads).where(eq(leads.id, id)).get()!;
     const dto = toDTO(updated);
     broadcast('lead.updated', dto);
+    if (body.status !== undefined && body.status !== existing.status) {
+      void emitAutomation(
+        'lead.status-changed',
+        { from: existing.status, to: body.status },
+        dto as unknown as Record<string, unknown>,
+      );
+    }
     return { lead: dto };
   });
 
@@ -551,6 +578,24 @@ export async function registerLeadRoutes(app: App): Promise<void> {
         dailyCount: updatedLine.dailyCount,
         dailyCapMessages: updatedLine.dailyCapMessages,
       },
+    });
+  });
+
+  app.post('/api/leads/:id/convert-to-contact', { preHandler: requireAuth }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const body = convertLeadBodySchema.parse(req.body ?? {}) ?? {};
+    const result = convertLeadToContact({
+      leadId: id,
+      overrides: body?.overrides,
+      byUserId: req.currentUser!.id,
+    });
+    const db = getDb();
+    const updatedLead = db.select().from(leads).where(eq(leads.id, result.leadId)).get()!;
+    const leadDto = toDTO(updatedLead);
+    broadcast('lead.updated', leadDto);
+    reply.status(201).send({
+      contact: contactToDTO(result.contact),
+      lead: leadDto,
     });
   });
 }
