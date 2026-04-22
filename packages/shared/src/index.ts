@@ -1,5 +1,6 @@
 export * from './schemas/auth.js';
 export * from './schemas/user.js';
+export * from './schemas/lead.js';
 
 /**
  * @mycrm/shared — tipos compartidos entre apps/web y functions.
