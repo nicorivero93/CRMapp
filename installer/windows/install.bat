@@ -9,22 +9,12 @@ echo.
 echo === MyCRM Local Server install ===
 echo.
 
-REM --- Admin check (triple fallback) ---
-REM net session puede fallar aun corriendo como admin en algunas configs;
-REM fltmc es el driver-filter manager, requiere admin y viene en todo Windows.
-set "ADMIN=0"
-net session >nul 2>&1 && set "ADMIN=1"
-if "%ADMIN%"=="0" fltmc >nul 2>&1 && set "ADMIN=1"
-if "%ADMIN%"=="0" openfiles >nul 2>&1 && set "ADMIN=1"
-
-if "%ADMIN%"=="0" (
+REM --- Admin check usando WindowsPrincipal (API oficial, funciona donde falle net/fltmc) ---
+powershell -NoProfile -Command "exit ([int](-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)))"
+if errorlevel 1 (
     echo.
     echo ERROR: Este instalador debe correrse como Administrador.
-    echo.
-    echo Si hiciste click derecho y "Ejecutar como administrador" pero ves este error:
-    echo   1. Abri "Terminal (Administrador)" con Win+X
-    echo   2. cd "%~dp0"
-    echo   3. install.bat
+    echo Win+X ^> "Terminal (Administrador)" ^> cd "%~dp0" ^> install.bat
     echo.
     pause
     exit /b 1

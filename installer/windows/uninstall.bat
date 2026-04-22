@@ -9,11 +9,8 @@ echo.
 echo === MyCRM Local Server uninstall ===
 echo.
 
-set "ADMIN=0"
-net session >nul 2>&1 && set "ADMIN=1"
-if "%ADMIN%"=="0" fltmc >nul 2>&1 && set "ADMIN=1"
-if "%ADMIN%"=="0" openfiles >nul 2>&1 && set "ADMIN=1"
-if "%ADMIN%"=="0" (
+powershell -NoProfile -Command "exit ([int](-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)))"
+if errorlevel 1 (
     echo ERROR: correr como Administrador.
     echo   Win+X ^> "Terminal (Administrador)" ^> cd "%~dp0" ^> uninstall.bat
     pause
