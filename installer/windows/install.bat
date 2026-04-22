@@ -46,6 +46,8 @@ xcopy /E /Y /I /Q "%SRC_DIR%VERSION.txt"       "%INSTALL_DIR%\"         >nul
 xcopy /E /Y /I /Q "%SRC_DIR%launch.cmd"        "%INSTALL_DIR%\"         >nul
 xcopy /E /Y /I /Q "%SRC_DIR%drizzle"           "%INSTALL_DIR%\drizzle\" >nul
 xcopy /E /Y /I /Q "%SRC_DIR%node_modules"      "%INSTALL_DIR%\node_modules\" >nul
+xcopy /E /Y /I /Q "%SRC_DIR%public"            "%INSTALL_DIR%\public\"      >nul
+if exist "%SRC_DIR%update.ps1" copy /Y "%SRC_DIR%update.ps1" "%INSTALL_DIR%\update.ps1" >nul
 
 REM --- Download WinSW if not present ---
 set "WINSW=%INSTALL_DIR%\winsw.exe"

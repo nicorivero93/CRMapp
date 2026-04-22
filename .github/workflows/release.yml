@@ -1,0 +1,102 @@
+name: Release
+
+# Se dispara al pushear un tag 'v*' (ej: v0.2.0). Buildea el release zip
+# + el .exe de Tauri y los sube como assets al GitHub Release correspondiente.
+#
+# Workflow local:
+#   git checkout main
+#   git merge local
+#   git tag v0.2.0
+#   git push origin main --tags
+#   # esperar ~10 min, el release aparece en github.com/nicorivero93/CRMapp/releases
+#   # luego en la PC del cliente, en Settings → Actualizaciones → "Chequear ahora" → "Actualizar ahora"
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+
+      - name: Install
+        run: npm ci
+
+      - name: Extract version from tag
+        id: version
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}" -replace '^v',''
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Version: $version"
+
+      - name: Bump server package version
+        shell: pwsh
+        run: |
+          $pkgPath = 'apps/server/package.json'
+          $pkg = Get-Content $pkgPath -Raw | ConvertFrom-Json
+          $pkg.version = '${{ steps.version.outputs.version }}'
+          $pkg | ConvertTo-Json -Depth 10 | Set-Content $pkgPath -Encoding UTF8
+
+      - name: Bump server config version
+        shell: pwsh
+        run: |
+          $configPath = 'apps/server/src/config.ts'
+          $txt = Get-Content $configPath -Raw
+          $txt = $txt -replace "version: '[^']+'","version: '${{ steps.version.outputs.version }}'"
+          $txt | Set-Content $configPath -Encoding UTF8
+
+      - name: Generate icons
+        shell: pwsh
+        run: npm run desktop:icons
+
+      - name: Build Tauri desktop
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ''
+        run: npm run build:desktop
+
+      - name: Build release (server + web UI + installer + bundled Tauri exe)
+        shell: pwsh
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File apps/server/packaging/build-release.ps1
+
+      - name: Zip release folder
+        shell: pwsh
+        run: |
+          $zip = "mycrm-local-${{ steps.version.outputs.version }}.zip"
+          Compress-Archive -Path apps/server/release/* -DestinationPath $zip -CompressionLevel Optimal
+          Write-Host "Created: $zip ($(('{0:N1}' -f ((Get-Item $zip).Length / 1MB))) MB)"
+          # Also rename to a stable name for the updater's asset-matcher
+          Copy-Item $zip "mycrm-local.zip"
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            mycrm-local-*.zip
+            mycrm-local.zip
+            apps/desktop/src-tauri/target/release/bundle/nsis/*-setup.exe
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

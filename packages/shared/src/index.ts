@@ -13,3 +13,4 @@ export * from './schemas/stage.js';
 export * from './schemas/deal.js';
 export * from './schemas/event.js';
 export * from './schemas/automation.js';
+export * from './schemas/updater.js';

@@ -1,8 +1,9 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Zap, ChevronRight, MessageSquare, Recycle, MessageCircle, Kanban } from 'lucide-react';
+import { Zap, ChevronRight, MessageSquare, Recycle, MessageCircle, Kanban, Download } from 'lucide-react';
 import { api, type PublicUser } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import type { UpdaterStatusDTO } from '@mycrm/shared';
 
 export default function Settings() {
   const { user } = useAuth();
@@ -10,6 +11,13 @@ export default function Settings() {
     queryKey: ['users'],
     queryFn: () => api.get<{ users: PublicUser[] }>('/api/users'),
   });
+  const updaterQ = useQuery({
+    queryKey: ['updater-status'],
+    queryFn: () => api.get<{ status: UpdaterStatusDTO }>('/api/updater/status'),
+    enabled: user?.role === 'owner',
+  });
+  const hasUpdate = updaterQ.data?.status.hasUpdate ?? false;
+  const latestVersion = updaterQ.data?.status.latestVersion;
 
   return (
     <div className="p-6 space-y-6 max-w-3xl">
@@ -47,6 +55,32 @@ export default function Settings() {
                 <div className="text-sm font-medium">Templates de WhatsApp</div>
                 <div className="text-xs text-text-dim">
                   Mensajes reusables con variables que las vendedoras eligen al enviar.
+                </div>
+              </div>
+            </div>
+            <ChevronRight size={16} className="text-text-faint" />
+          </Link>
+          <Link
+            to="/app/settings/updater"
+            className="flex items-center justify-between rounded-lg border border-border bg-bg-soft p-4 transition-colors hover:bg-bg-hover"
+          >
+            <div className="flex items-center gap-3">
+              <div className={`grid h-9 w-9 place-items-center rounded-lg ${hasUpdate ? 'bg-amber-500/20 text-amber-400' : 'bg-brand-500/15 text-brand-400'}`}>
+                <Download size={16} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  Actualizaciones
+                  {hasUpdate && (
+                    <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] text-amber-400">
+                      v{latestVersion} disponible
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs text-text-dim">
+                  {hasUpdate
+                    ? 'Bajá la última versión con rollback automático si falla.'
+                    : 'Chequeá nuevas versiones en GitHub. Backup + rollback automático.'}
                 </div>
               </div>
             </div>

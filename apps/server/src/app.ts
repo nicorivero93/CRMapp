@@ -15,6 +15,7 @@ import { registerStageRoutes } from './stages/routes.js';
 import { registerDealRoutes } from './deals/routes.js';
 import { registerEventRoutes } from './events/routes.js';
 import { registerAutomationRoutes } from './automations/routes.js';
+import { registerUpdaterRoutes } from './updater/routes.js';
 import { registerStreamRoutes } from './stream/routes.js';
 import { registerSettingsRoutes } from './settings/routes.js';
 import { registerLineRoutes } from './lines/routes.js';
@@ -46,6 +47,7 @@ export async function buildApp() {
   await registerDealRoutes(app);
   await registerEventRoutes(app);
   await registerAutomationRoutes(app);
+  await registerUpdaterRoutes(app);
   await registerStreamRoutes(app);
   await registerSettingsRoutes(app);
   await registerLineRoutes(app);
