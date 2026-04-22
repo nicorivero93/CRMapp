@@ -9,7 +9,7 @@ echo.
 echo === MyCRM Local Server uninstall ===
 echo.
 
-powershell -NoProfile -Command "exit ([int](-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)))"
+whoami /groups | find "S-1-5-32-544" >nul 2>&1
 if errorlevel 1 (
     echo ERROR: correr como Administrador.
     echo   Win+X ^> "Terminal (Administrador)" ^> cd "%~dp0" ^> uninstall.bat

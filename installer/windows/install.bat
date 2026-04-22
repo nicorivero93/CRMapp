@@ -9,8 +9,9 @@ echo.
 echo === MyCRM Local Server install ===
 echo.
 
-REM --- Admin check usando WindowsPrincipal (API oficial, funciona donde falle net/fltmc) ---
-powershell -NoProfile -Command "exit ([int](-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)))"
+REM --- Admin check via SID del grupo Administrators (built-in Windows, no depende de PATH) ---
+REM S-1-5-32-544 es el SID well-known del grupo BUILTIN\Administrators.
+whoami /groups | find "S-1-5-32-544" >nul 2>&1
 if errorlevel 1 (
     echo.
     echo ERROR: Este instalador debe correrse como Administrador.
@@ -55,9 +56,12 @@ REM --- Download WinSW if not present ---
 set "WINSW=%INSTALL_DIR%\winsw.exe"
 if not exist "%WINSW%" (
     echo -^> Descargando WinSW ^(servicios Windows^)...
-    powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-        "Invoke-WebRequest -Uri 'https://github.com/winsw/winsw/releases/download/v3.0.0-alpha.11/WinSW-x64.exe' -OutFile '%WINSW%'" || (
+    REM curl.exe viene en Windows 10 1803+ / Server 2019+.
+    curl -sL -o "%WINSW%" "https://github.com/winsw/winsw/releases/download/v3.0.0-alpha.11/WinSW-x64.exe"
+    if not exist "%WINSW%" (
         echo ERROR: No se pudo descargar WinSW. Verificá tu conexion a internet.
+        echo         URL: https://github.com/winsw/winsw/releases/download/v3.0.0-alpha.11/WinSW-x64.exe
+        echo         Podes bajarlo manualmente y dejarlo como: %WINSW%
         pause
         exit /b 1
     )
