@@ -14,6 +14,8 @@ import { registerStreamRoutes } from './stream/routes.js';
 import { registerSettingsRoutes } from './settings/routes.js';
 import { registerLineRoutes } from './lines/routes.js';
 import { registerTemplateRoutes } from './templates/routes.js';
+import { registerRecyclingRoutes } from './recycling/routes.js';
+import { registerAnalyticsRoutes } from './analytics/routes.js';
 
 export async function buildApp() {
   const app = Fastify({
@@ -35,6 +37,8 @@ export async function buildApp() {
   await registerSettingsRoutes(app);
   await registerLineRoutes(app);
   await registerTemplateRoutes(app);
+  await registerRecyclingRoutes(app);
+  await registerAnalyticsRoutes(app);
 
   return app;
 }

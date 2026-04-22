@@ -2,6 +2,7 @@ import cron, { type ScheduledTask } from 'node-cron';
 import { logger } from '../lib/logger.js';
 import { getSettings } from '../settings/service.js';
 import { runDailyReset } from './daily.js';
+import { runRecyclingCycle } from '../leads/recyclingService.js';
 
 let task: ScheduledTask | null = null;
 
@@ -23,6 +24,12 @@ export function startScheduler(): void {
         logger.info(r, 'scheduler: daily tick');
       } catch (err) {
         logger.error({ err }, 'scheduler: daily tick failed');
+      }
+      try {
+        const r = runRecyclingCycle({ byUserId: null });
+        logger.info(r, 'scheduler: recycling cycle');
+      } catch (err) {
+        logger.error({ err }, 'scheduler: recycling cycle failed');
       }
     },
     { timezone: settings.timezone },
