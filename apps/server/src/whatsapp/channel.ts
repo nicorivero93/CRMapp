@@ -22,13 +22,36 @@ export class ManualChannel implements WhatsAppChannel {
   }
 }
 
-let current: WhatsAppChannel = new ManualChannel();
+import { getWhatsAppChannelKind, revealMetaSecrets } from './settings.js';
+import { MetaCloudChannel } from './metaCloud.js';
 
+let override: WhatsAppChannel | null = null;
+
+/**
+ * Returns the channel configured in `appSettings`. Re-reads on every call so
+ * the operator can flip Manual ↔ Meta Cloud without restarting the server.
+ *
+ * Tests / mocks can force a specific channel via `setWhatsAppChannel`.
+ */
 export function getWhatsAppChannel(): WhatsAppChannel {
-  return current;
+  if (override) return override;
+  try {
+    if (getWhatsAppChannelKind() === 'meta-cloud') {
+      const s = revealMetaSecrets();
+      if (s.phoneNumberId && s.accessToken) {
+        return new MetaCloudChannel({
+          phoneNumberId: s.phoneNumberId,
+          accessToken: s.accessToken,
+        });
+      }
+    }
+  } catch {
+    /* fallthrough to manual */
+  }
+  return new ManualChannel();
 }
 
-/** Used by tests or L2.8 MetaCloud swap. */
-export function setWhatsAppChannel(ch: WhatsAppChannel): void {
-  current = ch;
+/** For tests or explicit overrides. Pass null to restore dynamic selection. */
+export function setWhatsAppChannel(ch: WhatsAppChannel | null): void {
+  override = ch;
 }
