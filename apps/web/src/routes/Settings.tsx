@@ -1,4 +1,6 @@
+import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { Zap, ChevronRight } from 'lucide-react';
 import { api, type PublicUser } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
@@ -15,6 +17,24 @@ export default function Settings() {
         <h1 className="text-2xl font-semibold">Configuración</h1>
         <p className="text-sm text-text-dim">Tu cuenta, usuarios y preferencias de la instalación.</p>
       </div>
+
+      {user?.role === 'owner' && (
+        <Link
+          to="/app/settings/assignment"
+          className="flex items-center justify-between rounded-lg border border-border bg-bg-soft p-4 transition-colors hover:bg-bg-hover"
+        >
+          <div className="flex items-center gap-3">
+            <div className="grid h-9 w-9 place-items-center rounded-lg bg-brand-500/15 text-brand-400">
+              <Zap size={16} />
+            </div>
+            <div>
+              <div className="text-sm font-medium">Asignación de leads</div>
+              <div className="text-xs text-text-dim">Modo, targets diarios, reparto manual.</div>
+            </div>
+          </div>
+          <ChevronRight size={16} className="text-text-faint" />
+        </Link>
+      )}
 
       <section className="rounded-lg border border-border bg-bg-soft p-4">
         <h2 className="mb-3 text-sm font-semibold text-text-dim">Tu cuenta</h2>

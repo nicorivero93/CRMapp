@@ -5,8 +5,10 @@ import Login from '@/routes/Login';
 import Signup from '@/routes/Signup';
 import Dashboard from '@/routes/Dashboard';
 import Leads from '@/routes/Leads';
+import MyLeads from '@/routes/MyLeads';
 import LeadsImport from '@/routes/LeadsImport';
 import LeadDetail from '@/routes/LeadDetail';
+import SettingsAssignment from '@/routes/SettingsAssignment';
 import Pipeline from '@/routes/Pipeline';
 import Contacts from '@/routes/Contacts';
 import Calendar from '@/routes/Calendar';
@@ -32,6 +34,7 @@ export default function App() {
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="leads" element={<Leads />} />
+        <Route path="leads/mine" element={<MyLeads />} />
         <Route path="leads/import" element={<LeadsImport />} />
         <Route path="leads/:id" element={<LeadDetail />} />
         <Route path="pipeline" element={<Pipeline />} />
@@ -39,6 +42,7 @@ export default function App() {
         <Route path="calendar" element={<Calendar />} />
         <Route path="automations" element={<Automations />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="settings/assignment" element={<SettingsAssignment />} />
       </Route>
       <Route path="*" element={<Navigate to="/app" replace />} />
     </Routes>

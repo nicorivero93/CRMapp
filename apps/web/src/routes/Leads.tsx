@@ -5,7 +5,7 @@ import { Inbox, Search, Upload } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import type { LeadDTO, LeadSource, LeadStatus } from '@mycrm/shared';
-import { api } from '@/lib/api';
+import { api, type PublicUser } from '@/lib/api';
 
 const STATUS_OPTIONS: Array<{ value: LeadStatus | ''; label: string }> = [
   { value: '', label: 'Todos los estados' },
@@ -71,6 +71,15 @@ export default function Leads() {
     queryFn: () => api.get(`/api/leads?${params.toString()}`),
     placeholderData: (prev) => prev,
   });
+
+  const usersQ = useQuery({
+    queryKey: ['users'],
+    queryFn: () => api.get<{ users: PublicUser[] }>('/api/users'),
+  });
+  const userName = (id: string | null): string => {
+    if (!id) return '—';
+    return usersQ.data?.users.find((u) => u.id === id)?.name ?? id.slice(0, 6);
+  };
 
   const total = data?.total ?? 0;
   const pageStart = offset + 1;
@@ -144,6 +153,7 @@ export default function Leads() {
               <th className="px-4 py-2 text-left font-medium">Nombre</th>
               <th className="px-4 py-2 text-left font-medium">Teléfono</th>
               <th className="px-4 py-2 text-left font-medium">Estado</th>
+              <th className="px-4 py-2 text-left font-medium">Asignado a</th>
               <th className="px-4 py-2 text-left font-medium">Fuente</th>
               <th className="px-4 py-2 text-left font-medium">Creado</th>
             </tr>
@@ -151,7 +161,7 @@ export default function Leads() {
           <tbody className="divide-y divide-border">
             {!isLoading && data?.leads.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-sm text-text-dim">
+                <td colSpan={6} className="px-4 py-10 text-center text-sm text-text-dim">
                   No hay leads con estos filtros. <Link to="/app/leads/import" className="text-brand-400 hover:underline">Importá CSV</Link> o pegá una lista.
                 </td>
               </tr>
@@ -169,6 +179,7 @@ export default function Leads() {
                     {lead.status}
                   </span>
                 </td>
+                <td className="px-4 py-2 text-xs text-text-dim">{userName(lead.assignedTo)}</td>
                 <td className="px-4 py-2 text-xs text-text-dim">{lead.source}</td>
                 <td className="px-4 py-2 text-xs text-text-faint">
                   {formatDistanceToNow(new Date(lead.createdAt), { addSuffix: true, locale: es })}
