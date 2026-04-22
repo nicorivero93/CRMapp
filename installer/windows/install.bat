@@ -99,32 +99,16 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM --- Firewall rule (TCP 3180 inbound) ---
-echo -^> Abriendo puerto 3180 en firewall...
-netsh advfirewall firewall delete rule name="MyCRM (3180)" >nul 2>&1
-netsh advfirewall firewall add rule name="MyCRM (3180)" dir=in action=allow protocol=TCP localport=3180 profile=private,domain >nul
-if errorlevel 1 (
-    echo AVISO: no se pudo agregar regla de firewall. Agregala a mano si otra PC no puede conectar.
-)
-
 REM --- Summary ---
 echo.
 echo === Listo ===
 echo.
-for /f "tokens=2 delims=:" %%i in ('ipconfig ^| findstr /i "IPv4"') do (
-    set "IP=%%i"
-    set "IP=!IP: =!"
-    echo   URL local  :  http://localhost:3180
-    echo   URL LAN    :  http://!IP!:3180
-    goto :ip_done
-)
-:ip_done
-echo   URL mDNS   :  http://mycrm.local:3180   ^(cuando funcione mDNS^)
-echo   Data DB    :  %DATA_DIR%\mycrm.db
-echo   Logs       :  %LOG_DIR%
+echo   URL      :  http://localhost:3180
+echo   Data DB  :  %DATA_DIR%\mycrm.db
+echo   Logs     :  %LOG_DIR%
 echo.
-echo Las vendedoras entran desde su navegador usando la URL de LAN de arriba.
-echo Para crear accesos directos en sus escritorios: correr create-shortcut.ps1 en cada PC.
+echo Abrí http://localhost:3180 en tu navegador. El servicio MyCRMServer
+echo arranca con Windows automáticamente.
 echo.
 pause
 endlocal

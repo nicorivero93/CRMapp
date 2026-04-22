@@ -4,7 +4,10 @@ export const assignmentModeSchema = z.enum(['round-robin', 'capacity-weighted', 
 export type AssignmentMode = z.infer<typeof assignmentModeSchema>;
 
 export const appSettingsSchema = z.object({
-  assignmentMode: assignmentModeSchema.default('capacity-weighted'),
+  // Default 'manual-only': single-user deployments don't need auto-assign.
+  // Owner can flip to 'capacity-weighted' from Settings when they add sales
+  // users with daily targets > 0.
+  assignmentMode: assignmentModeSchema.default('manual-only'),
   timezone: z.string().default('America/Argentina/Buenos_Aires'),
   defaultRecyclingDays: z.number().int().min(1).max(365).default(7),
 });

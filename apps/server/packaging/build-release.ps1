@@ -156,6 +156,18 @@ if (Test-Path $installerSrc) {
     Copy-Item (Join-Path $installerSrc '*') $releaseDir -Force
 }
 
+# 10. Copy the Tauri desktop installer if it's been built. Single-PC users
+#     don't strictly need it (they can open http://localhost:3180 in any
+#     browser), but bundling it keeps everything in one zip.
+$tauriBundleDir = Join-Path $repoRoot 'apps\desktop\src-tauri\target\release\bundle\nsis'
+if (Test-Path $tauriBundleDir) {
+    $tauriExe = Get-ChildItem $tauriBundleDir -Filter '*-setup.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($tauriExe) {
+        Copy-Item $tauriExe.FullName (Join-Path $releaseDir $tauriExe.Name) -Force
+        Write-Host "   copied desktop installer ($($tauriExe.Name))"
+    }
+}
+
 # Size report
 $size = (Get-ChildItem $releaseDir -Recurse -File | Measure-Object -Property Length -Sum).Sum / 1MB
 Write-Host ""

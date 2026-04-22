@@ -1,10 +1,31 @@
+import { useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { LayoutDashboard, KanbanSquare, Users, Calendar, Zap, Settings, Sparkles, Inbox, Upload, Target, Phone, BarChart3 } from 'lucide-react';
 import clsx from 'clsx';
+import { api, type PublicUser } from '@/lib/api';
 
-const items = [
+interface Item {
+  to: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  end: boolean;
+  /** If set, item only renders when predicate on {users} returns true. */
+  showIf?: (ctx: { users: PublicUser[] }) => boolean;
+}
+
+const ALL_ITEMS: Item[] = [
   { to: '/app/dashboard', label: 'Inicio', icon: LayoutDashboard, end: true },
-  { to: '/app/leads/mine', label: 'Mis leads', icon: Target, end: true },
+  // Only useful when there's more than one user (leads can be assigned to
+  // someone other than you). In a single-user install this just mirrors
+  // "Todos los leads" so we hide it.
+  {
+    to: '/app/leads/mine',
+    label: 'Mis leads',
+    icon: Target,
+    end: true,
+    showIf: ({ users }) => users.length > 1,
+  },
   { to: '/app/leads', label: 'Todos los leads', icon: Inbox, end: true },
   { to: '/app/leads/import', label: 'Importar', icon: Upload, end: true },
   { to: '/app/lines', label: 'Mis líneas', icon: Phone, end: true },
@@ -17,6 +38,17 @@ const items = [
 ];
 
 export function Sidebar() {
+  const usersQ = useQuery({
+    queryKey: ['users'],
+    queryFn: () => api.get<{ users: PublicUser[] }>('/api/users'),
+  });
+  const users = usersQ.data?.users ?? [];
+
+  const items = useMemo(
+    () => ALL_ITEMS.filter((i) => !i.showIf || i.showIf({ users })),
+    [users],
+  );
+
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r border-border bg-bg-soft">
       <div className="flex items-center gap-2 px-5 py-5">

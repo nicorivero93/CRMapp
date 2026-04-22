@@ -99,20 +99,30 @@
   }
 
   async function tryAutoConnect() {
+    // 1) Saved config wins if present (user pointed it at a remote server).
     const cfg = readConfig();
-    if (!cfg) {
-      showForm();
+    if (cfg) {
+      const r = await probe(cfg.host, cfg.port);
+      if (r.ok) {
+        redirect(cfg.host, cfg.port);
+        return;
+      }
+      showForm({
+        prefill: cfg,
+        error: `No pude conectar a ${cfg.host}:${cfg.port} — ${r.reason}. Verificá que el servidor esté prendido.`,
+      });
       return;
     }
-    const r = await probe(cfg.host, cfg.port);
-    if (r.ok) {
-      redirect(cfg.host, cfg.port);
+    // 2) First-run default: try localhost (single-PC deployment). If the
+    //    server is on the same machine this just works without any wizard.
+    const local = await probe('localhost', 3180, 2000);
+    if (local.ok) {
+      writeConfig({ host: 'localhost', port: 3180 });
+      redirect('localhost', 3180);
       return;
     }
-    showForm({
-      prefill: cfg,
-      error: `No pude conectar a ${cfg.host}:${cfg.port} — ${r.reason}. Verificá que el servidor esté prendido.`,
-    });
+    // 3) No localhost, no saved config → show the manual form.
+    showForm();
   }
 
   async function onConnect(e) {

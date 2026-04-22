@@ -31,7 +31,7 @@ if exist "%WINSW%" (
     sc delete %SERVICE_NAME% >nul 2>&1
 )
 
-echo -^> Removiendo regla de firewall...
+REM --- Best-effort remove of old firewall rule from previous installs ---
 netsh advfirewall firewall delete rule name="MyCRM (3180)" >nul 2>&1
 
 if exist "%INSTALL_DIR%" (

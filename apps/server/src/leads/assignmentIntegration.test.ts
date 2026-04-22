@@ -76,6 +76,13 @@ beforeEach(async () => {
 
 describe('end-to-end assignment', () => {
   it('importing 100 leads splits 50/30/15 across 3 sales users with targets 50/30/15', async () => {
+    // Default mode is manual-only; flip to capacity-weighted for this test.
+    await app.inject({
+      method: 'PATCH',
+      url: '/api/settings',
+      headers: { cookie: ownerCookie },
+      payload: { assignmentMode: 'capacity-weighted' },
+    });
     // Zero the owner's capacity so only sales users receive leads
     const meRes = await app.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie: ownerCookie } });
     const ownerId = meRes.json().user.id;
