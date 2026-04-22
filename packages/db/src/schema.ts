@@ -219,3 +219,4 @@ export type DealRow = typeof deals.$inferSelect;
 export type StageRow = typeof stages.$inferSelect;
 export type AppSettingRow = typeof appSettings.$inferSelect;
 export type MessageTemplateRow = typeof messageTemplates.$inferSelect;
+export type RecyclingRuleRow = typeof recyclingRules.$inferSelect;

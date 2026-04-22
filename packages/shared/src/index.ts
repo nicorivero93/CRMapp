@@ -5,6 +5,8 @@ export * from './schemas/settings.js';
 export * from './schemas/line.js';
 export * from './schemas/template.js';
 export * from './schemas/whatsapp.js';
+export * from './schemas/recycling.js';
+export * from './schemas/analytics.js';
 
 /**
  * @mycrm/shared — tipos compartidos entre apps/web y functions.
