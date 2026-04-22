@@ -42,7 +42,17 @@ export function Sidebar() {
           </NavLink>
         ))}
       </nav>
-      <div className="px-5 py-4 text-[11px] text-text-faint">v0.1 · Built with Claude Code</div>
+      <div className="px-5 py-4 text-[11px] text-text-faint">
+        © 2026 ·{' '}
+        <a
+          href="https://tomerivero-dev.web.app"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-text-dim hover:text-brand-400"
+        >
+          tomerivero.dev
+        </a>
+      </div>
     </aside>
   );
 }

@@ -63,6 +63,17 @@ export default function Login() {
         <p className="mt-6 text-center text-sm text-text-dim">
           ¿Primera vez? <Link to="/signup" className="text-brand-400 hover:underline">Configurar owner</Link>
         </p>
+        <p className="mt-8 text-center text-[11px] text-text-faint">
+          © 2026 ·{' '}
+          <a
+            href="https://tomerivero-dev.web.app"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-brand-400"
+          >
+            tomerivero.dev
+          </a>
+        </p>
       </div>
     </div>
   );
