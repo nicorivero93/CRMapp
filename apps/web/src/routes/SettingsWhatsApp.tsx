@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { ArrowLeft, MessageCircle, AlertTriangle, Send, Check } from 'lucide-react';
+import { ArrowLeft, MessageCircle, AlertTriangle, Send, Check, BookOpen, ExternalLink } from 'lucide-react';
 import type { WhatsAppChannelKind, WhatsAppSettingsDTO } from '@mycrm/shared';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -112,6 +112,8 @@ export default function SettingsWhatsApp() {
               ))}
             </div>
           </section>
+
+          <SetupGuide webhookUrl={s.webhookUrl} />
 
           <MetaConfigForm
             current={s}
@@ -312,6 +314,270 @@ function TestSendPanel({
           <Send size={14} /> {sending ? 'Enviando…' : 'Enviar test'}
         </button>
       </div>
+    </section>
+  );
+}
+
+function ExtLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-0.5 text-brand-400 hover:underline"
+    >
+      {children}
+      <ExternalLink size={11} />
+    </a>
+  );
+}
+
+function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
+  return (
+    <div className="relative rounded-md border border-border bg-bg/40 p-3 pl-10">
+      <div className="absolute left-2 top-2 grid h-6 w-6 place-items-center rounded-full bg-brand-500/20 text-xs font-semibold text-brand-400">
+        {n}
+      </div>
+      <div className="mb-1 text-sm font-medium">{title}</div>
+      <div className="space-y-1 text-xs text-text-dim">{children}</div>
+    </div>
+  );
+}
+
+function SetupGuide({ webhookUrl }: { webhookUrl: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section className="rounded-lg border border-border bg-bg-soft">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between p-4 text-left"
+      >
+        <div className="flex items-center gap-3">
+          <div className="grid h-9 w-9 place-items-center rounded-lg bg-brand-500/15 text-brand-400">
+            <BookOpen size={16} />
+          </div>
+          <div>
+            <div className="text-sm font-medium">Cómo obtener las credenciales de Meta</div>
+            <div className="text-xs text-text-dim">
+              Guía paso a paso — abrí esto antes de completar el form de abajo.
+            </div>
+          </div>
+        </div>
+        <span className="text-xs text-text-faint">{open ? 'Cerrar ▲' : 'Abrir ▼'}</span>
+      </button>
+
+      {open && (
+        <div className="space-y-4 border-t border-border p-4">
+          <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
+            <div className="mb-1 font-medium">Antes de arrancar:</div>
+            <ul className="list-disc space-y-1 pl-4">
+              <li>
+                La aprobación inicial de Meta tarda <b>1 a 2 semanas</b>. Planeá con tiempo.
+              </li>
+              <li>
+                Necesitás un <b>número de teléfono nuevo</b>, no el mismo de tu WhatsApp personal.
+              </li>
+              <li>
+                El server donde corre MyCRM necesita ser <b>accesible desde internet</b>{' '}
+                (URL pública). Abajo explicamos cómo.
+              </li>
+              <li>
+                Costos Argentina 2026: conversaciones <b>service</b> (lead escribe primero, ventana
+                24 h) → <b>gratis</b>. Marketing (template) → ~0.05 USD/conversación.
+              </li>
+            </ul>
+          </div>
+
+          <Step n={1} title="Crear la WhatsApp Business Account (WABA)">
+            <ol className="list-decimal space-y-1 pl-4">
+              <li>
+                Entrá a{' '}
+                <ExtLink href="https://business.facebook.com/">business.facebook.com</ExtLink> y
+                logueate con la cuenta de Facebook que va a administrar.
+              </li>
+              <li>
+                Configuración del negocio → Cuentas → <b>Cuentas de WhatsApp</b> → Agregar.
+              </li>
+              <li>
+                Registrás un <b>número nuevo</b> (Meta manda SMS/llamada para verificar).
+              </li>
+              <li>
+                Agregás método de pago (tarjeta). Sólo se cobra por mensajes facturables.
+              </li>
+            </ol>
+          </Step>
+
+          <Step n={2} title="Crear la App en Meta for Developers">
+            <ol className="list-decimal space-y-1 pl-4">
+              <li>
+                Entrá a{' '}
+                <ExtLink href="https://developers.facebook.com/apps">
+                  developers.facebook.com/apps
+                </ExtLink>{' '}
+                → Create App → tipo <b>Business</b>.
+              </li>
+              <li>Asociás la app con tu WABA del paso 1.</li>
+              <li>En el sidebar agregás el producto <b>WhatsApp</b>.</li>
+              <li>
+                En la sección WhatsApp vas a ver arriba los valores que necesitás:
+                <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                  <li>
+                    <code className="text-text">phone_number_id</code> — lo copiás y pegás en el
+                    campo <b>phoneNumberId</b> del form de abajo.
+                  </li>
+                  <li>
+                    <code className="text-text">WhatsApp Business Account ID</code> → campo{' '}
+                    <b>businessId</b>.
+                  </li>
+                </ul>
+              </li>
+            </ol>
+          </Step>
+
+          <Step n={3} title="Obtener un Access Token permanente">
+            <p>
+              Meta te da un token temporal (24 h) para probar. Para producción necesitás un{' '}
+              <b>System User token sin expiración</b>:
+            </p>
+            <ol className="list-decimal space-y-1 pl-4">
+              <li>
+                Meta Business → Configuración → Usuarios →{' '}
+                <b>Usuarios del sistema</b> → Crear.
+              </li>
+              <li>
+                Asignale tu app con permisos{' '}
+                <code className="text-text">whatsapp_business_messaging</code> +{' '}
+                <code className="text-text">whatsapp_business_management</code>.
+              </li>
+              <li>
+                Generá un token <b>sin expiración</b>.
+              </li>
+              <li>
+                Copiás ese valor y lo pegás en el campo <b>accessToken</b> del form.
+              </li>
+            </ol>
+          </Step>
+
+          <Step n={4} title="Exponer el server a internet (webhook)">
+            <p>
+              Meta necesita hacer POST a tu server cuando llega un mensaje. Tu server corre en
+              localhost, así que necesitás un "túnel" que le dé una URL pública. Recomendadas:
+            </p>
+            <div className="mt-2 space-y-2">
+              <div className="rounded border border-border bg-bg/40 p-2">
+                <div className="mb-1 font-medium text-text">
+                  Cloudflare Tunnel (gratis, recomendado)
+                </div>
+                <ol className="list-decimal space-y-0.5 pl-4">
+                  <li>Necesitás un dominio (~USD 10/año o gratis con Cloudflare Zero Trust).</li>
+                  <li>
+                    <ExtLink href="https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/">
+                      Instalar cloudflared
+                    </ExtLink>{' '}
+                    (<code>winget install Cloudflare.cloudflared</code>).
+                  </li>
+                  <li>
+                    <code className="text-text">cloudflared tunnel login</code>
+                  </li>
+                  <li>
+                    <code className="text-text">cloudflared tunnel create mycrm</code>
+                  </li>
+                  <li>
+                    <code className="text-text">
+                      cloudflared tunnel route dns mycrm mycrm.tudominio.com
+                    </code>
+                  </li>
+                  <li>
+                    <code className="text-text">
+                      cloudflared tunnel run mycrm --url http://localhost:3180
+                    </code>
+                  </li>
+                </ol>
+              </div>
+              <div className="rounded border border-border bg-bg/40 p-2">
+                <div className="mb-1 font-medium text-text">ngrok (rápido para probar)</div>
+                <ol className="list-decimal space-y-0.5 pl-4">
+                  <li>
+                    <ExtLink href="https://ngrok.com/download">Bajar ngrok</ExtLink> y crear cuenta.
+                  </li>
+                  <li>
+                    <code className="text-text">ngrok http 3180</code> → te da una URL{' '}
+                    <code>https://xxxx.ngrok-free.app</code>.
+                  </li>
+                  <li>
+                    En plan gratis la URL cambia cada vez que reiniciás ngrok (mala para producción,
+                    OK para probar).
+                  </li>
+                </ol>
+              </div>
+              <div className="rounded border border-border bg-bg/40 p-2">
+                <div className="mb-1 font-medium text-text">Tailscale Funnel (alternativa)</div>
+                <div>
+                  Similar a Cloudflare pero sin dominio propio —{' '}
+                  <ExtLink href="https://tailscale.com/kb/1223/funnel">docs</ExtLink>.
+                </div>
+              </div>
+            </div>
+          </Step>
+
+          <Step n={5} title="Configurar el webhook en Meta">
+            <ol className="list-decimal space-y-1 pl-4">
+              <li>
+                Inventá un <b>verify token</b>: cualquier string secreta (ej.{' '}
+                <code className="text-text">mycrm-verify-xyz123</code>). Copiala en el campo{' '}
+                <b>webhookVerifyToken</b> del form de abajo.
+              </li>
+              <li>
+                En Meta → app → WhatsApp → Configuration → Webhooks → <b>Edit</b>:
+                <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                  <li>
+                    Callback URL:{' '}
+                    <code className="break-all text-text">
+                      {webhookUrl || 'https://TU-DOMINIO-PUBLICO/api/whatsapp/webhook'}
+                    </code>
+                  </li>
+                  <li>Verify token: el mismo string de arriba.</li>
+                  <li>
+                    Fields: subscribí <b>messages</b>.
+                  </li>
+                </ul>
+              </li>
+              <li>
+                Meta te hace un GET con el token → MyCRM lo compara y devuelve OK. Si pasa, queda
+                verificado.
+              </li>
+            </ol>
+          </Step>
+
+          <Step n={6} title="Activar Meta Cloud en MyCRM">
+            <ol className="list-decimal space-y-1 pl-4">
+              <li>
+                Completá los 4 campos del form de abajo (Guardar credenciales).
+              </li>
+              <li>
+                Una vez que aparece el check verde "Config completa", en la card{' '}
+                <b>"Canal activo"</b> (arriba) clickeás <b>"Meta Cloud API"</b>.
+              </li>
+              <li>
+                Probá el envío real desde la sección <b>"Probar envío"</b> — mandate un mensaje a
+                tu propio celular para validar.
+              </li>
+              <li>
+                A partir de ese momento, cada click en "WhatsApp" dentro de un lead envía vía Meta
+                Cloud y las respuestas se registran solas en el timeline.
+              </li>
+            </ol>
+          </Step>
+
+          <div className="rounded-md border border-border bg-bg/40 p-3 text-xs text-text-dim">
+            <div className="mb-1 font-medium text-text">Templates (opcional, avanzado)</div>
+            Fuera de la ventana de 24 h, Meta sólo permite mensajes con <b>templates aprobados</b>.
+            Esta versión de MyCRM envía siempre como "texto libre" — funciona bien dentro de la
+            ventana pero falla si intentás iniciar una conversación. Cuando necesites templates
+            (marketing outbound), pasame el caso y lo agregamos.
+          </div>
+        </div>
+      )}
     </section>
   );
 }
