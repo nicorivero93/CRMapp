@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Zap, ChevronRight, MessageSquare, Recycle } from 'lucide-react';
+import { Zap, ChevronRight, MessageSquare, Recycle, MessageCircle } from 'lucide-react';
 import { api, type PublicUser } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
@@ -64,6 +64,23 @@ export default function Settings() {
                 <div className="text-sm font-medium">Reciclaje de leads</div>
                 <div className="text-xs text-text-dim">
                   Reglas para devolver al pool los leads sin contacto después de N días.
+                </div>
+              </div>
+            </div>
+            <ChevronRight size={16} className="text-text-faint" />
+          </Link>
+          <Link
+            to="/app/settings/whatsapp"
+            className="flex items-center justify-between rounded-lg border border-border bg-bg-soft p-4 transition-colors hover:bg-bg-hover"
+          >
+            <div className="flex items-center gap-3">
+              <div className="grid h-9 w-9 place-items-center rounded-lg bg-brand-500/15 text-brand-400">
+                <MessageCircle size={16} />
+              </div>
+              <div>
+                <div className="text-sm font-medium">WhatsApp</div>
+                <div className="text-xs text-text-dim">
+                  Canal manual (wa.me) o Meta Cloud API con webhook entrante.
                 </div>
               </div>
             </div>
