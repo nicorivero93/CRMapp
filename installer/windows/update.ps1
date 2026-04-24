@@ -71,10 +71,16 @@ function Write-Log {
 
 function Cleanup-ScheduledTask {
     # Remove the one-shot task the server created to dispatch us (v0.1.6+
-    # spawn path). No-op on legacy manual runs.
+    # spawn path). Also clean up the .bat/.xml helpers from v0.1.8+. No-op
+    # on legacy manual runs.
     if ($Script:CleanupTaskOnExit) {
         try {
             & "$env:SystemRoot\System32\schtasks.exe" /Delete /TN MyCRMUpdate /F 2>&1 | Out-Null
+        } catch {}
+        try {
+            $dispatchDir = Join-Path $env:ProgramData 'MyCRM'
+            Remove-Item (Join-Path $dispatchDir 'update-runner.bat') -Force -ErrorAction SilentlyContinue
+            Remove-Item (Join-Path $dispatchDir 'update-runner.xml') -Force -ErrorAction SilentlyContinue
         } catch {}
     }
 }

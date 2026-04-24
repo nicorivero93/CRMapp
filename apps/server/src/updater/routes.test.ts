@@ -134,11 +134,10 @@ describe('POST /api/updater/apply', () => {
       if (fs.existsSync(scriptPath)) fs.unlinkSync(scriptPath);
     });
 
-    it('happy path: dispara schtasks /Delete + /Create + /Run y responde initiated', async () => {
+    it('happy path: escribe .bat + .xml y dispara schtasks /XML + /Run', async () => {
       const calls: string[][] = [];
       vi.spyOn(updaterDeps, 'runSchtasks').mockImplementation(async (args) => {
         calls.push(args);
-        // El primer /Delete simula "no existe" — stderr con mensaje esperado.
         if (args[0] === '/Delete' && calls.length === 1) {
           return { args, stdout: '', stderr: 'ERROR: does not exist', code: 1 };
         }
@@ -156,26 +155,40 @@ describe('POST /api/updater/apply', () => {
       expect(res.statusCode).toBe(200);
       expect(res.json()).toMatchObject({ status: 'initiated', version: '99.99.99' });
 
-      // 3 invocaciones: Delete (pre-cleanup), Create, Run
+      // 3 invocaciones: Delete (pre-cleanup), Create via XML, Run
       expect(calls).toHaveLength(3);
       expect(calls[0]).toEqual(['/Delete', '/TN', 'MyCRMUpdate', '/F']);
-      // Create: verifica flags clave
+
+      // Create: usa /XML con path al runner-xml, NO /TR con el comando embebido.
       expect(calls[1]).toContain('/Create');
       expect(calls[1]).toContain('/TN');
       expect(calls[1]).toContain('MyCRMUpdate');
-      expect(calls[1]).toContain('/RU');
-      expect(calls[1]).toContain('SYSTEM');
-      expect(calls[1]).toContain('/RL');
-      expect(calls[1]).toContain('HIGHEST');
-      // El /TR debe incluir powershell.exe, el script, y el TargetVersion
-      const trIdx = calls[1]!.indexOf('/TR');
-      const trCmd = calls[1]![trIdx + 1]!;
-      expect(trCmd).toMatch(/powershell\.exe/i);
-      expect(trCmd).toContain('update.ps1');
-      expect(trCmd).toContain('-TargetVersion 99.99.99');
-      expect(trCmd).toContain('-AssetUrl "https://example/v99.99.99.zip"');
+      expect(calls[1]).toContain('/XML');
+      expect(calls[1]).not.toContain('/TR'); // evita el limite de 261 chars
+      const xmlIdx = calls[1]!.indexOf('/XML');
+      const xmlPath = calls[1]![xmlIdx + 1]!;
+      expect(xmlPath).toMatch(/update-runner\.xml$/);
+
       // Run
       expect(calls[2]).toEqual(['/Run', '/TN', 'MyCRMUpdate']);
+
+      // El .bat debe existir y contener el comando completo (no truncado).
+      const programData = process.env.ProgramData ?? 'C:\\ProgramData';
+      const batPath = path.join(programData, 'MyCRM', 'update-runner.bat');
+      expect(fs.existsSync(batPath)).toBe(true);
+      const batContent = fs.readFileSync(batPath, 'utf8');
+      expect(batContent).toMatch(/powershell\.exe/i);
+      expect(batContent).toContain('update.ps1');
+      expect(batContent).toContain('-TargetVersion 99.99.99');
+      expect(batContent).toContain('-AssetUrl "https://example/v99.99.99.zip"');
+
+      // El XML debe tener las opciones de bateria deshabilitadas.
+      const xmlContent = fs.readFileSync(xmlPath, 'utf16le').replace(/^\uFEFF/, '');
+      expect(xmlContent).toContain('<DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>');
+      expect(xmlContent).toContain('<StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>');
+      expect(xmlContent).toContain('<UserId>S-1-5-18</UserId>'); // LocalSystem
+      expect(xmlContent).toContain('<RunLevel>HighestAvailable</RunLevel>');
+      expect(xmlContent).toContain(batPath);
     });
 
     it('si schtasks /Create falla → responde 500 con el stderr', async () => {

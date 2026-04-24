@@ -228,36 +228,112 @@ export async function registerUpdaterRoutes(app: App): Promise<void> {
     }
 
     const logDir = path.join(process.env.ProgramData ?? 'C:\\ProgramData', 'MyCRM', 'logs');
+    const dispatchDir = path.join(process.env.ProgramData ?? 'C:\\ProgramData', 'MyCRM');
     markerLog(logDir, `apply start: target=${target} script=${script}`);
 
-    // Build the command line that the scheduled task will execute. The task
-    // runs under SYSTEM via svchost (Task Scheduler), OUTSIDE the service's
-    // Job Object, so Stop-Service inside update.ps1 can't kill it.
+    // The scheduled task has to escape two pitfalls that bit us in 0.1.6 / 0.1.7:
+    //   1. `schtasks /TR` has a ~261-char limit. The powershell path + update.ps1
+    //      path + GitHub asset URL blow past that and get silently truncated
+    //      (observed: URL lost its ".zip" suffix → "conexión terminada" on download).
+    //   2. Tasks created via `schtasks /Create` inherit defaults that include
+    //      "Don't start if on batteries" + "Stop if going on batteries". For
+    //      cobradores/vendedores on notebooks in the street, that kills the
+    //      update silently.
+    // Fix: write a .bat runner (no length limit) and register the task via
+    // `schtasks /XML` where we can set battery options explicitly.
     const systemRoot = process.env.SystemRoot ?? 'C:\\Windows';
     const psExe = path.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+    const runnerBatPath = path.join(dispatchDir, 'update-runner.bat');
+    const runnerXmlPath = path.join(dispatchDir, 'update-runner.xml');
+
     const assetUrlArg = state.releaseAssetUrl ? ` -AssetUrl "${state.releaseAssetUrl}"` : '';
-    const taskCommand =
-      `"${psExe}" -NoProfile -ExecutionPolicy Bypass -File "${script}"` +
-      ` -TargetVersion ${target}${assetUrlArg}`;
+    const runnerBatContent =
+      `@echo off\r\n` +
+      `REM Generado por MyCRM server v${config.version} para dispatch del updater.\r\n` +
+      `REM Auto-borrado por update.ps1 al terminar (happy path o rollback).\r\n` +
+      `"${psExe}" -NoProfile -ExecutionPolicy Bypass -File "${script}" -TargetVersion ${target}${assetUrlArg}\r\n` +
+      `exit /b %ERRORLEVEL%\r\n`;
+    try {
+      fs.mkdirSync(dispatchDir, { recursive: true });
+      fs.writeFileSync(runnerBatPath, runnerBatContent, 'utf8');
+    } catch (err) {
+      markerLog(logDir, `runner .bat write failed: ${(err as Error).message}`);
+      reply.status(500).send({
+        status: 'no-candidate',
+        version: target,
+        message:
+          `No pude escribir el runner del updater en ${runnerBatPath}. ` +
+          `Motivo: ${(err as Error).message}`,
+      });
+      return;
+    }
+
+    // Task XML — must be UTF-16 LE with BOM (schtasks requirement).
+    // S-1-5-18 = LocalSystem SID. AllowStartOnDemand + no trigger means the
+    // task only runs when dispatched via `schtasks /Run`.
+    const taskXml =
+      `<?xml version="1.0" encoding="UTF-16"?>\r\n` +
+      `<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">\r\n` +
+      `  <RegistrationInfo>\r\n` +
+      `    <Description>MyCRM one-shot updater dispatch (v${config.version})</Description>\r\n` +
+      `  </RegistrationInfo>\r\n` +
+      `  <Principals>\r\n` +
+      `    <Principal id="Author">\r\n` +
+      `      <UserId>S-1-5-18</UserId>\r\n` +
+      `      <RunLevel>HighestAvailable</RunLevel>\r\n` +
+      `    </Principal>\r\n` +
+      `  </Principals>\r\n` +
+      `  <Settings>\r\n` +
+      `    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>\r\n` +
+      `    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>\r\n` +
+      `    <AllowHardTerminate>true</AllowHardTerminate>\r\n` +
+      `    <StartWhenAvailable>true</StartWhenAvailable>\r\n` +
+      `    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>\r\n` +
+      `    <AllowStartOnDemand>true</AllowStartOnDemand>\r\n` +
+      `    <Enabled>true</Enabled>\r\n` +
+      `    <Hidden>false</Hidden>\r\n` +
+      `    <RunOnlyIfIdle>false</RunOnlyIfIdle>\r\n` +
+      `    <WakeToRun>false</WakeToRun>\r\n` +
+      `    <ExecutionTimeLimit>PT30M</ExecutionTimeLimit>\r\n` +
+      `    <Priority>7</Priority>\r\n` +
+      `    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>\r\n` +
+      `    <IdleSettings>\r\n` +
+      `      <StopOnIdleEnd>false</StopOnIdleEnd>\r\n` +
+      `      <RestartOnIdle>false</RestartOnIdle>\r\n` +
+      `    </IdleSettings>\r\n` +
+      `  </Settings>\r\n` +
+      `  <Actions Context="Author">\r\n` +
+      `    <Exec>\r\n` +
+      `      <Command>${runnerBatPath}</Command>\r\n` +
+      `    </Exec>\r\n` +
+      `  </Actions>\r\n` +
+      `</Task>\r\n`;
+    try {
+      const bom = Buffer.from([0xff, 0xfe]);
+      const body = Buffer.from(taskXml, 'utf16le');
+      fs.writeFileSync(runnerXmlPath, Buffer.concat([bom, body]));
+    } catch (err) {
+      markerLog(logDir, `runner .xml write failed: ${(err as Error).message}`);
+      reply.status(500).send({
+        status: 'no-candidate',
+        version: target,
+        message: `No pude escribir el XML de la tarea. Motivo: ${(err as Error).message}`,
+      });
+      return;
+    }
 
     // 1. Defensive delete — a stale task from a previous failed attempt would
     //    make /Create fail with ERROR_ALREADY_EXISTS.
     const delRes = await updaterDeps.runSchtasks(['/Delete', '/TN', TASK_NAME, '/F']);
     if (delRes.code !== 0 && !/no existe|cannot find|does not exist/i.test(delRes.stderr)) {
-      // Not just "nothing to delete" — something else went wrong. Log but continue.
       markerLog(logDir, `pre-delete warning: code=${delRes.code} stderr=${delRes.stderr.trim()}`);
     }
 
-    // 2. Create the one-shot task. /ST 00:00 is a placeholder — we dispatch
-    //    it manually with /Run right after.
+    // 2. Create the task from the XML (gets battery settings + proper principal).
     const createRes = await updaterDeps.runSchtasks([
       '/Create',
       '/TN', TASK_NAME,
-      '/TR', taskCommand,
-      '/SC', 'ONCE',
-      '/ST', '00:00',
-      '/RU', 'SYSTEM',
-      '/RL', 'HIGHEST',
+      '/XML', runnerXmlPath,
       '/F',
     ]);
     if (createRes.code !== 0) {
