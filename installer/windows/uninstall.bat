@@ -25,6 +25,9 @@ set "DATA_DIR=%ProgramData%\MyCRM\data"
 set "SERVICE_NAME=MyCRMServer"
 set "WINSW=%INSTALL_DIR%\winsw.exe"
 
+REM --- Remove any orphaned update task (v0.1.6+ spawn via Task Scheduler) ---
+schtasks /Delete /TN MyCRMUpdate /F >nul 2>&1
+
 if exist "%WINSW%" (
     echo -^> Deteniendo servicio...
     "%WINSW%" stop "%INSTALL_DIR%\winsw.xml" >nul 2>&1

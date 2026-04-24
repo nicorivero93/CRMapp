@@ -1,6 +1,6 @@
 [package]
 name = "mycrm-desktop"
-version = "0.1.5"
+version = "0.1.6"
 description = "MyCRM Local Edition desktop wrapper"
 edition = "2021"
 rust-version = "1.77"

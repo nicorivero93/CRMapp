@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { eq } from 'drizzle-orm';
 import { appSettings } from '@mycrm/db';
 import { applyUpdateSchema, type UpdaterStatusDTO, type ApplyUpdateResponse } from '@mycrm/shared';
@@ -15,6 +16,13 @@ type App = Awaited<ReturnType<typeof buildApp>>;
 const KEY = 'updater';
 const REPO = 'nicorivero93/CRMapp';
 const ASSET_NAME_PATTERN = /mycrm-local.*\.zip$/i;
+
+/** Windows Task Scheduler: one-shot task that runs update.ps1 OUTSIDE the
+ *  service's Job Object. Without this, Stop-Service inside update.ps1 would
+ *  destroy WinSW's Job Object and kill the updater mid-run. See plan.md. */
+const TASK_NAME = 'MyCRMUpdate';
+
+const execFileAsync = promisify(execFile);
 
 interface StoredUpdaterState {
   latestVersion: string | null;
@@ -116,6 +124,55 @@ function findUpdaterScript(): string | null {
   return candidates.find((p) => fs.existsSync(p)) ?? null;
 }
 
+export interface SchtasksInvocation {
+  args: string[];
+  stdout: string;
+  stderr: string;
+  code: number | null;
+}
+
+/** Thin wrapper around schtasks.exe. Never throws — returns the exit code
+ *  so callers can branch cleanly. Exposed via `updaterDeps` so tests can
+ *  spy/mock it without spinning up real Windows tasks. */
+async function runSchtasksReal(args: string[]): Promise<SchtasksInvocation> {
+  const systemRoot = process.env.SystemRoot ?? 'C:\\Windows';
+  const schtasksExe = path.join(systemRoot, 'System32', 'schtasks.exe');
+  try {
+    const { stdout, stderr } = await execFileAsync(schtasksExe, args, {
+      windowsHide: true,
+      maxBuffer: 1024 * 1024,
+    });
+    return { args, stdout, stderr, code: 0 };
+  } catch (err) {
+    const e = err as NodeJS.ErrnoException & { stdout?: string; stderr?: string; code?: number };
+    return {
+      args,
+      stdout: e.stdout ?? '',
+      stderr: e.stderr ?? e.message ?? '',
+      code: typeof e.code === 'number' ? e.code : 1,
+    };
+  }
+}
+
+/** Mockable dependency surface. Tests use vi.spyOn on these fields. */
+export const updaterDeps = {
+  runSchtasks: runSchtasksReal,
+};
+
+/** Append a line to update-marker.log so we can reconstruct what happened
+ *  from disk even if the process died before logging to pino. */
+function markerLog(logDir: string, line: string): void {
+  try {
+    fs.mkdirSync(logDir, { recursive: true });
+    fs.appendFileSync(
+      path.join(logDir, 'update-marker.log'),
+      `[${new Date().toISOString()}] ${line}\n`,
+    );
+  } catch {
+    // best-effort; never crash the handler on log write
+  }
+}
+
 export async function registerUpdaterRoutes(app: App): Promise<void> {
   app.get('/api/updater/status', { preHandler: requireAuth }, async () => {
     return { status: toDTO(readState()) };
@@ -170,95 +227,72 @@ export async function registerUpdaterRoutes(app: App): Promise<void> {
       return;
     }
 
-    // Use absolute path to powershell.exe: when running as SYSTEM under WinSW
-    // the PATH env often does not include WindowsPowerShell\v1.0, so bare
-    // 'powershell.exe' fails with ENOENT (silently, because stdio is ignored).
+    const logDir = path.join(process.env.ProgramData ?? 'C:\\ProgramData', 'MyCRM', 'logs');
+    markerLog(logDir, `apply start: target=${target} script=${script}`);
+
+    // Build the command line that the scheduled task will execute. The task
+    // runs under SYSTEM via svchost (Task Scheduler), OUTSIDE the service's
+    // Job Object, so Stop-Service inside update.ps1 can't kill it.
     const systemRoot = process.env.SystemRoot ?? 'C:\\Windows';
     const psExe = path.join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
-    if (!fs.existsSync(psExe)) {
-      logger.error({ psExe }, 'updater: powershell.exe not found');
+    const assetUrlArg = state.releaseAssetUrl ? ` -AssetUrl "${state.releaseAssetUrl}"` : '';
+    const taskCommand =
+      `"${psExe}" -NoProfile -ExecutionPolicy Bypass -File "${script}"` +
+      ` -TargetVersion ${target}${assetUrlArg}`;
+
+    // 1. Defensive delete — a stale task from a previous failed attempt would
+    //    make /Create fail with ERROR_ALREADY_EXISTS.
+    const delRes = await updaterDeps.runSchtasks(['/Delete', '/TN', TASK_NAME, '/F']);
+    if (delRes.code !== 0 && !/no existe|cannot find|does not exist/i.test(delRes.stderr)) {
+      // Not just "nothing to delete" — something else went wrong. Log but continue.
+      markerLog(logDir, `pre-delete warning: code=${delRes.code} stderr=${delRes.stderr.trim()}`);
+    }
+
+    // 2. Create the one-shot task. /ST 00:00 is a placeholder — we dispatch
+    //    it manually with /Run right after.
+    const createRes = await updaterDeps.runSchtasks([
+      '/Create',
+      '/TN', TASK_NAME,
+      '/TR', taskCommand,
+      '/SC', 'ONCE',
+      '/ST', '00:00',
+      '/RU', 'SYSTEM',
+      '/RL', 'HIGHEST',
+      '/F',
+    ]);
+    if (createRes.code !== 0) {
+      markerLog(logDir, `schtasks /Create failed: code=${createRes.code} stderr=${createRes.stderr.trim()}`);
+      logger.error({ stderr: createRes.stderr, code: createRes.code }, 'updater: schtasks /Create failed');
       reply.status(500).send({
         status: 'no-candidate',
         version: target,
-        message: `No encontré powershell.exe en ${psExe}. Contactá soporte.`,
+        message:
+          'No pude crear la tarea programada del updater. ' +
+          `schtasks /Create devolvió código ${createRes.code}: ${createRes.stderr.trim() || 'sin detalle'}. ` +
+          'Verificá que el servicio "Task Scheduler" (services.msc) esté habilitado.',
       });
       return;
     }
+    markerLog(logDir, `schtasks /Create ok`);
 
-    // Write a marker file so we can tell from disk whether the spawn happened.
-    const logDir = path.join(process.env.ProgramData ?? 'C:\\ProgramData', 'MyCRM', 'logs');
-    try { fs.mkdirSync(logDir, { recursive: true }); } catch { /* ignore */ }
-    const markerPath = path.join(logDir, 'update-marker.log');
-    const startedAt = new Date().toISOString();
-    try {
-      fs.appendFileSync(
-        markerPath,
-        `[${startedAt}] spawn attempt: target=${target} script=${script}\n`,
-      );
-    } catch { /* ignore */ }
-
-    // Capture child's stdout + stderr to a dedicated file so if PowerShell dies
-    // early (execution policy, AV, missing DLL…) we can see what happened.
-    const spawnLogPath = path.join(
-      logDir,
-      `update-spawn-${startedAt.replace(/[:.]/g, '-')}.log`,
-    );
-    let spawnLogFd: number | null = null;
-    try {
-      spawnLogFd = fs.openSync(spawnLogPath, 'a');
-      fs.writeSync(
-        spawnLogFd,
-        `[${startedAt}] === spawn begin: psExe=${psExe} script=${script} target=${target}\n`,
-      );
-    } catch (err) {
-      logger.warn({ err }, 'updater: could not open spawn log');
+    // 3. Dispatch it.
+    const runRes = await updaterDeps.runSchtasks(['/Run', '/TN', TASK_NAME]);
+    if (runRes.code !== 0) {
+      markerLog(logDir, `schtasks /Run failed: code=${runRes.code} stderr=${runRes.stderr.trim()}`);
+      logger.error({ stderr: runRes.stderr, code: runRes.code }, 'updater: schtasks /Run failed');
+      // Cleanup the orphaned task so the next attempt starts clean.
+      await updaterDeps.runSchtasks(['/Delete', '/TN', TASK_NAME, '/F']);
+      reply.status(500).send({
+        status: 'no-candidate',
+        version: target,
+        message:
+          'Creé la tarea programada pero no pude dispararla. ' +
+          `schtasks /Run devolvió código ${runRes.code}: ${runRes.stderr.trim() || 'sin detalle'}.`,
+      });
+      return;
     }
-
-    logger.info({ script, target, psExe }, 'updater: launching update script');
-    // Note: we do NOT override `env` here. Inheriting the parent env avoids
-    // subtle Path/PATH case conflicts that were suspected of making the child
-    // die before running the first line of update.ps1. psExe is already an
-    // absolute path, so PATH is not needed to locate PowerShell itself.
-    const child = spawn(
-      psExe,
-      [
-        '-NoProfile',
-        '-ExecutionPolicy', 'Bypass',
-        '-File', script,
-        '-TargetVersion', target,
-        ...(state.releaseAssetUrl ? ['-AssetUrl', state.releaseAssetUrl] : []),
-      ],
-      {
-        cwd: path.dirname(script),
-        detached: true,
-        stdio: spawnLogFd != null ? ['ignore', spawnLogFd, spawnLogFd] : 'ignore',
-        windowsHide: true,
-      },
-    );
-    try {
-      fs.appendFileSync(
-        markerPath,
-        `[${new Date().toISOString()}] spawn ok: pid=${child.pid}\n`,
-      );
-    } catch { /* ignore */ }
-    child.on('error', (err) => {
-      logger.error({ err: err.message, psExe, script }, 'updater: spawn failed');
-      try {
-        fs.appendFileSync(
-          markerPath,
-          `[${new Date().toISOString()}] spawn error: ${err.message}\n`,
-        );
-      } catch { /* ignore */ }
-    });
-    child.on('exit', (code, signal) => {
-      try {
-        fs.appendFileSync(
-          markerPath,
-          `[${new Date().toISOString()}] child exited: code=${code} signal=${signal}\n`,
-        );
-      } catch { /* ignore */ }
-    });
-    child.unref();
+    markerLog(logDir, `schtasks /Run ok — update.ps1 should be running now`);
+    logger.info({ script, target }, 'updater: scheduled task dispatched');
 
     const res: ApplyUpdateResponse = {
       status: 'initiated',

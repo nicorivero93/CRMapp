@@ -30,6 +30,12 @@ param(
 # Harmless when PATH is already correct — we just prepend the canonical dirs.
 $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot;$env:SystemRoot\System32\Wbem;$env:SystemRoot\System32\WindowsPowerShell\v1.0;$env:PATH"
 
+# Self-cleanup: when the server dispatches this script via Task Scheduler
+# (v0.1.6+), a task named "MyCRMUpdate" was created just before. Delete it
+# on exit no matter how we finish — completion, rollback, or uncaught crash.
+# Pre-v0.1.6 flows don't have this task, so /Delete will no-op.
+$Script:CleanupTaskOnExit = $true
+
 # Boot marker: write BEFORE any other logic so we can prove PowerShell
 # actually started the script, even if $ErrorActionPreference later kills us.
 try {
@@ -63,6 +69,16 @@ function Write-Log {
     } catch {}
 }
 
+function Cleanup-ScheduledTask {
+    # Remove the one-shot task the server created to dispatch us (v0.1.6+
+    # spawn path). No-op on legacy manual runs.
+    if ($Script:CleanupTaskOnExit) {
+        try {
+            & "$env:SystemRoot\System32\schtasks.exe" /Delete /TN MyCRMUpdate /F 2>&1 | Out-Null
+        } catch {}
+    }
+}
+
 function Rollback {
     param([string]$reason)
     Write-Log "ROLLBACK: $reason" 'ERROR'
@@ -81,6 +97,7 @@ function Rollback {
     } catch {
         Write-Log ("Rollback tiró error: " + $_.Exception.Message) 'ERROR'
     }
+    Cleanup-ScheduledTask
     exit 1
 }
 
@@ -203,6 +220,9 @@ try {
 } catch {}
 
 Remove-Item $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
+
+# 10. Self-cleanup of the scheduled task (v0.1.6+ spawn path).
+Cleanup-ScheduledTask
 
 Write-Log "== Update COMPLETO a v$TargetVersion =="
 exit 0
