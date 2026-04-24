@@ -163,7 +163,12 @@ if (Test-Path $installerSrc) {
 #     browser), but bundling it keeps everything in one zip.
 $tauriBundleDir = Join-Path $repoRoot 'apps\desktop\src-tauri\target\release\bundle\nsis'
 if (Test-Path $tauriBundleDir) {
-    $tauriExe = Get-ChildItem $tauriBundleDir -Filter '*-setup.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+    # Take the most recently built .exe — otherwise `-First 1` returns the
+    # oldest by name order (e.g. 0.1.1 before 0.1.5 on a dev machine with
+    # multiple builds in the folder).
+    $tauriExe = Get-ChildItem $tauriBundleDir -Filter '*-setup.exe' -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
     if ($tauriExe) {
         Copy-Item $tauriExe.FullName (Join-Path $releaseDir $tauriExe.Name) -Force
         Write-Host "   copied desktop installer ($($tauriExe.Name))"

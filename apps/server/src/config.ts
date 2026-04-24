@@ -26,5 +26,5 @@ export const config = {
   cookieSecret: process.env.COOKIE_SECRET ?? 'dev-secret-change-me-in-prod',
   isDev: process.env.NODE_ENV !== 'production',
   sessionTtlDays: 30,
-  version: '0.1.4',
+  version: '0.1.5',
 } as const;
