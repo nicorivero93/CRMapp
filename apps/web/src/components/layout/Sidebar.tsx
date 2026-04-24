@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { LayoutDashboard, KanbanSquare, Users, Calendar, Zap, Settings, Sparkles, Inbox, Upload, Target, Phone, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, KanbanSquare, Users, Calendar, Zap, Settings, Sparkles, Inbox, Upload, Target, Phone, BarChart3, BookOpen } from 'lucide-react';
 import clsx from 'clsx';
 import { api, type PublicUser } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -36,6 +36,7 @@ const ALL_ITEMS: Item[] = [
   { to: '/app/contacts', label: 'Contactos', icon: Users, end: true },
   { to: '/app/calendar', label: 'Calendario', icon: Calendar, end: true },
   { to: '/app/automations', label: 'Automatizaciones', icon: Zap, end: true },
+  { to: '/app/conocimiento', label: 'Conocimiento', icon: BookOpen, end: true },
   { to: '/app/settings', label: 'Configuración', icon: Settings, end: false },
 ];
 

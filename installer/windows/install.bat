@@ -32,6 +32,9 @@ set "INSTALL_DIR=%ProgramFiles%\MyCRM"
 set "DATA_DIR=%ProgramData%\MyCRM\data"
 set "LOG_DIR=%ProgramData%\MyCRM\logs"
 set "SERVICE_NAME=MyCRMServer"
+REM Backups van a Documents del user que instala. UAC eleva manteniendo el perfil,
+REM asi que %USERPROFILE% sigue siendo el del user humano, no del admin.
+set "BACKUP_DIR=%USERPROFILE%\Documents\db-backups"
 
 REM --- Stop pre-existing service ---
 sc query %SERVICE_NAME% >nul 2>&1
@@ -45,6 +48,7 @@ echo -^> Creando carpetas...
 if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
 if not exist "%DATA_DIR%"    mkdir "%DATA_DIR%"
 if not exist "%LOG_DIR%"     mkdir "%LOG_DIR%"
+if not exist "%BACKUP_DIR%"  mkdir "%BACKUP_DIR%"
 
 REM --- Copy release files (everything except this script + uninstall + README + WinSW which handled separately) ---
 echo -^> Copiando archivos a %INSTALL_DIR% ...
@@ -83,6 +87,7 @@ echo -^> Configurando servicio Windows...
     echo   ^<arguments^>server-bundle.cjs^</arguments^>
     echo   ^<workingdirectory^>%INSTALL_DIR%^</workingdirectory^>
     echo   ^<env name="DB_PATH" value="%DATA_DIR%\mycrm.db"/^>
+    echo   ^<env name="BACKUP_DIR" value="%BACKUP_DIR%"/^>
     echo   ^<env name="NODE_ENV" value="production"/^>
     echo   ^<env name="PORT" value="3180"/^>
     echo   ^<log mode="roll-by-size"^>
@@ -118,6 +123,7 @@ echo === Listo ===
 echo.
 echo   URL      :  http://localhost:3180
 echo   Data DB  :  %DATA_DIR%\mycrm.db
+echo   Backups  :  %BACKUP_DIR% (diario, retencion 7 dias)
 echo   Logs     :  %LOG_DIR%
 echo.
 echo Abrí http://localhost:3180 en tu navegador. El servicio MyCRMServer

@@ -20,6 +20,7 @@ import Pipeline from '@/routes/Pipeline';
 import Contacts from '@/routes/Contacts';
 import Calendar from '@/routes/Calendar';
 import Automations from '@/routes/Automations';
+import Conocimiento from '@/routes/Conocimiento';
 import Settings from '@/routes/Settings';
 import Profile from '@/routes/Profile';
 
@@ -51,6 +52,7 @@ export default function App() {
         <Route path="contacts" element={<Contacts />} />
         <Route path="calendar" element={<Calendar />} />
         <Route path="automations" element={<Automations />} />
+        <Route path="conocimiento" element={<Conocimiento />} />
         <Route path="settings" element={<Settings />} />
         <Route path="settings/assignment" element={<SettingsAssignment />} />
         <Route path="settings/templates" element={<Templates />} />

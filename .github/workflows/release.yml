@@ -65,6 +65,14 @@ jobs:
           $txt = $txt -replace "version: '[^']+'","version: '${{ steps.version.outputs.version }}'"
           $txt | Set-Content $configPath -Encoding UTF8
 
+      - name: Bump Tauri desktop version
+        shell: pwsh
+        run: |
+          $tauriPath = 'apps/desktop/src-tauri/tauri.conf.json'
+          $cfg = Get-Content $tauriPath -Raw | ConvertFrom-Json
+          $cfg.version = '${{ steps.version.outputs.version }}'
+          $cfg | ConvertTo-Json -Depth 10 | Set-Content $tauriPath -Encoding UTF8
+
       - name: Generate icons
         shell: pwsh
         run: npm run desktop:icons

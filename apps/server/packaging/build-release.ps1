@@ -128,7 +128,9 @@ if (-not $nodeExe) { throw "node.exe not found on PATH" }
 Copy-Item $nodeExe (Join-Path $releaseDir 'node.exe')
 Write-Host "-> Copied node.exe from $nodeExe" -ForegroundColor Yellow
 
-# 6. Create data/ placeholder
+# 6. Create data/ placeholder. The installer points DB_PATH at ProgramData
+#    on target, so this dir stays empty in the shipped zip — but launch.cmd
+#    (dev/fallback mode) still expects it to exist relative to the bundle.
 New-Item (Join-Path $releaseDir 'data') -ItemType Directory -Force | Out-Null
 
 # 7. launch.cmd
@@ -166,6 +168,18 @@ if (Test-Path $tauriBundleDir) {
         Copy-Item $tauriExe.FullName (Join-Path $releaseDir $tauriExe.Name) -Force
         Write-Host "   copied desktop installer ($($tauriExe.Name))"
     }
+}
+
+# 11. Scrub data/ contents. Anything that leaked in from a previous run,
+#     a local smoke test, or CI artifacts must not ship to clients —
+#     their on-disk mycrm.db lives in %ProgramData%\MyCRM\data, never here.
+$dataDir = Join-Path $releaseDir 'data'
+if (Test-Path $dataDir) {
+    Get-ChildItem $dataDir -Force -ErrorAction SilentlyContinue |
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    # Guarantee the empty dir survives Compress-Archive (which drops empty dirs).
+    Set-Content -Path (Join-Path $dataDir '.keep') -Value '' -Encoding ASCII
+    Write-Host "   data/ scrubbed (empty shipped)"
 }
 
 # Size report
